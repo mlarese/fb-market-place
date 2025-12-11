@@ -144,23 +144,127 @@ export async function publishPost(targetId, message, options = {}) {
 }
 
 /**
- * Get comments on a post
+ * Get comments on a post (STORY-067)
  */
-export async function getPostComments(postId) {
+export async function getPostComments(postId, options = {}) {
   const pageToken = await getSecret('FACEBOOK_PAGE_TOKEN');
+  const { limit = 50, after = null } = options;
 
   try {
-    const response = await axios.get(`${GRAPH_API_URL}/${postId}/comments`, {
+    const params = {
+      access_token: pageToken,
+      fields: 'id,message,from{id,name},created_time,attachment,comment_count',
+      limit,
+    };
+
+    if (after) {
+      params.after = after;
+    }
+
+    const response = await axios.get(`${GRAPH_API_URL}/${postId}/comments`, { params });
+
+    return {
+      comments: (response.data.data || []).map(c => ({
+        id: c.id,
+        message: c.message,
+        from: c.from,
+        createdTime: c.created_time,
+        attachment: c.attachment,
+        replyCount: c.comment_count || 0,
+      })),
+      paging: response.data.paging,
+      hasMore: !!response.data.paging?.next,
+    };
+  } catch (error) {
+    console.error('Error fetching comments:', error.response?.data || error.message);
+    return { comments: [], hasMore: false };
+  }
+}
+
+/**
+ * Refresh a long-lived token (STORY-063)
+ * Long-lived tokens can be refreshed before they expire
+ */
+export async function refreshToken(longLivedToken) {
+  const appId = await getSecret('FACEBOOK_APP_ID');
+  const appSecret = await getSecret('FACEBOOK_APP_SECRET');
+
+  // First check if token is valid and get expiration
+  const tokenInfo = await debugToken(longLivedToken);
+
+  if (!tokenInfo.isValid) {
+    throw new Error('Token is invalid or expired');
+  }
+
+  // If token expires in more than 24 hours, we can refresh it
+  const now = new Date();
+  const expiresAt = tokenInfo.expiresAt;
+  const hoursUntilExpiry = expiresAt ? (expiresAt - now) / (1000 * 60 * 60) : 0;
+
+  if (hoursUntilExpiry > 24) {
+    // Token is still valid, exchange for a new long-lived token
+    try {
+      const response = await axios.get(`${GRAPH_API_URL}/oauth/access_token`, {
+        params: {
+          grant_type: 'fb_exchange_token',
+          client_id: appId,
+          client_secret: appSecret,
+          fb_exchange_token: longLivedToken,
+        },
+      });
+
+      return {
+        accessToken: response.data.access_token,
+        tokenType: response.data.token_type,
+        expiresIn: response.data.expires_in,
+        refreshedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('Error refreshing token:', error.response?.data || error.message);
+      throw new Error(`Failed to refresh token: ${error.message}`);
+    }
+  } else {
+    // Token is about to expire, user needs to re-authenticate
+    throw new Error('Token expires soon and cannot be refreshed. User must re-authenticate.');
+  }
+}
+
+/**
+ * Get page access token from user token (STORY-063)
+ */
+export async function getPageAccessToken(userAccessToken, pageId) {
+  try {
+    const response = await axios.get(`${GRAPH_API_URL}/${pageId}`, {
       params: {
-        access_token: pageToken,
-        fields: 'id,message,from,created_time',
+        access_token: userAccessToken,
+        fields: 'access_token',
       },
     });
 
-    return response.data.data || [];
+    return response.data.access_token;
   } catch (error) {
-    console.error('Error fetching comments:', error.response?.data || error.message);
-    return [];
+    console.error('Error getting page token:', error.response?.data || error.message);
+    throw new Error(`Failed to get page access token: ${error.message}`);
+  }
+}
+
+/**
+ * Reply to a comment (STORY-067)
+ */
+export async function replyToComment(commentId, message) {
+  const pageToken = await getSecret('FACEBOOK_PAGE_TOKEN');
+
+  try {
+    const response = await axios.post(
+      `${GRAPH_API_URL}/${commentId}/comments`,
+      { message },
+      { params: { access_token: pageToken } }
+    );
+
+    return { commentId: response.data.id };
+  } catch (error) {
+    console.error('Error replying to comment:', error.response?.data || error.message);
+    throw new Error(`Failed to reply to comment: ${error.message}`);
   }
 }
 
@@ -171,4 +275,7 @@ export default {
   debugToken,
   publishPost,
   getPostComments,
+  refreshToken,
+  getPageAccessToken,
+  replyToComment,
 };

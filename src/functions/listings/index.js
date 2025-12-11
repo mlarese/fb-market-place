@@ -58,6 +58,7 @@ async function createListing(event) {
     id: uuidv4(),
     userId,
     groupId: body.groupId || null,
+    groupExclusive: body.groupExclusive ?? false, // STORY-023: Only visible to group members
     title: body.title || body.titolo || '',
     description: body.description || body.descrizione || '',
     category: body.category || body.categoria || 'altro',
@@ -71,6 +72,7 @@ async function createListing(event) {
     spedizione: body.spedizione || body.shipping || false,
     images: body.images || [],
     facebookPostId: body.facebookPostId || null,
+    facebookGroupId: body.facebookGroupId || null, // STORY-024: Linked Facebook Group
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -98,10 +100,11 @@ async function getListing(listingId) {
 }
 
 /**
- * Search listings with filters (STORY-005)
+ * Search listings with filters (STORY-005, STORY-023)
  */
 async function searchListings(event) {
   const params = event.queryStringParameters || {};
+  const userId = event.requestContext?.authorizer?.userId;
 
   const {
     q,           // Full-text query
@@ -110,6 +113,7 @@ async function searchListings(event) {
     maxPrice,    // Max price
     location,    // Location text
     groupId,     // Group filter
+    includeExclusive, // Include group-exclusive listings
     status = 'active',
     page = '1',
     limit = '20',
@@ -161,14 +165,28 @@ async function searchListings(event) {
   // Status filter
   filter.push({ term: { status } });
 
-  const query = {
+  // STORY-023: Group exclusive filter
+  // By default, exclude group-exclusive listings unless user is in that group
+  if (!includeExclusive) {
+    filter.push({
+      bool: {
+        should: [
+          { term: { groupExclusive: false } },
+          { bool: { must_not: { exists: { field: 'groupExclusive' } } } },
+        ],
+        minimum_should_match: 1,
+      },
+    });
+  }
+
+  const searchQuery = {
     bool: {
       must: must.length > 0 ? must : [{ match_all: {} }],
       filter,
     },
   };
 
-  const results = await search(LISTINGS_INDEX, query, {
+  const results = await search(LISTINGS_INDEX, searchQuery, {
     from,
     size,
     sort: [{ createdAt: { order: 'desc' } }],

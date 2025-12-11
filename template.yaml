@@ -1086,6 +1086,67 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # ============================================
+  # SPRINT 5 - REFERRALS & POLISH
+  # ============================================
+
+  # STORY-039-042: Referrals Service
+  ReferralsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-referrals-${Environment}
+      Handler: functions/referrals/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaybackBalancesTable
+      Events:
+        RegisterReferral:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /referrals
+            Method: POST
+        GetReferrals:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /referrals
+            Method: GET
+        GetStats:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /referrals/stats
+            Method: GET
+        GetCode:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /referrals/code
+            Method: GET
+        CreditReferral:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /referrals/credit
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/referrals/index.js
+        External:
+          - "@aws-sdk/*"
+
   # Notifications Table
   NotificationsTable:
     Type: AWS::DynamoDB::Table
