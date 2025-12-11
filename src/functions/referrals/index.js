@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getItem, putItem, updateItem, query } from '../../lib/dynamodb.js';
-import { success, created, badRequest, notFound, forbidden } from '../../lib/response.js';
+import { success, created, badRequest, notFound } from '../../lib/response.js';
 
 const USERS_TABLE = process.env.USERS_TABLE;
 const TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE;
@@ -186,9 +186,9 @@ async function creditReferral(event) {
     return success({ credited: false, reason: 'Seller has no referrer' });
   }
 
-  // Calculate referrer cashback (2% of commission, which is 10% of sale)
-  const commission = saleAmount * 0.10;
-  const referrerCashback = commission * 0.02;
+  // Calculate referrer cashback (2% of sale amount)
+  // Based on cashback structure: Quofind 10%, Buyer 66%, Leader 5%, Referrer 2%
+  const referrerCashback = saleAmount * 0.02;
 
   if (referrerCashback <= 0) {
     return success({ credited: false, reason: 'Cashback amount too small' });

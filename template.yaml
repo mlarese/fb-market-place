@@ -1098,6 +1098,11 @@ Resources:
       Handler: functions/referrals/index.handler
       CodeUri: src/
       Timeout: 30
+      Environment:
+        Variables:
+          USERS_TABLE: !Ref MarketplaceUsersTable
+          TRANSACTIONS_TABLE: !Ref TransactionsTable
+          BALANCES_TABLE: !Ref PaybackBalancesTable
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MarketplaceUsersTable

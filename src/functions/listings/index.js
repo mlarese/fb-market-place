@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getItem, putItem, deleteItem, query } from '../../lib/dynamodb.js';
-import { indexDocument, deleteDocument, search } from '../../lib/opensearch.js';
+import { search } from '../../lib/opensearch.js';
 import { success, created, noContent, badRequest, notFound, forbidden } from '../../lib/response.js';
 
 const LISTINGS_TABLE = process.env.LISTINGS_TABLE;
