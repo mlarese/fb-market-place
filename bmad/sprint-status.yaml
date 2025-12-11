@@ -1,0 +1,349 @@
+version: "6.0.0"
+project_name: "Quofind Marketplace"
+project_level: 4
+current_sprint: 5
+sprint_plan_path: "docs/sprint-plan-quofind-marketplace-2025-12-10.md"
+
+sprints:
+  - sprint_number: 1
+    name: "Foundation & Infrastructure"
+    start_date: "2025-12-10"
+    end_date: "2025-12-10"
+    capacity_points: 60
+    committed_points: 53
+    completed_points: 53
+    status: "completed"
+    goal: "Establish infrastructure and core data layer for listings and users"
+    stories:
+      - story_id: "STORY-INF-001"
+        title: "API Gateway Setup"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-INF-002"
+        title: "CloudWatch Dashboards & Alarms"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-001"
+        title: "Setup DynamoDB MarketplaceListings Table"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-002"
+        title: "Setup OpenSearch Listings Index"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-008"
+        title: "DynamoDB to OpenSearch Sync"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-009"
+        title: "Setup DynamoDB MarketplaceRequests Table"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-018"
+        title: "Setup DynamoDB Groups Table"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-027"
+        title: "Setup DynamoDB PaybackBalances Table"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-028"
+        title: "Setup DynamoDB Transactions Table"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-029"
+        title: "Setup DynamoDB cashbackConfig Table"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-045"
+        title: "Setup DynamoDB MarketplaceUsers Table"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-064"
+        title: "Facebook Webhook Setup"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-068"
+        title: "Secrets Manager Integration"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-004"
+        title: "AI Content Analysis Integration"
+        points: 8
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-062"
+        title: "Token Validation Middleware"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+
+  - sprint_number: 2
+    name: "Core Listings & Authentication"
+    start_date: "2025-12-10"
+    end_date: "2025-12-10"
+    capacity_points: 60
+    committed_points: 50
+    completed_points: 50
+    status: "completed"
+    goal: "Deliver complete listing creation, search, and user authentication flows"
+    stories:
+      - story_id: "STORY-003"
+        title: "Create Listing Lambda Function"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-005"
+        title: "Search Listings Lambda Function"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-006"
+        title: "Delete Listing Lambda Function"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-012"
+        title: "n8n Handle New Facebook Post Workflow"
+        points: 8
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-010"
+        title: "Create Request Lambda Function"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-011"
+        title: "Get Active Requests Lambda"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-053"
+        title: "Send Messenger Message Utility"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-060"
+        title: "Facebook Login Integration"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-061"
+        title: "User Profile Management Lambda"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-065"
+        title: "Webhook Event Router"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-066"
+        title: "Graph API Post Reader"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-054"
+        title: "Listing Creation Confirmation"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+
+  - sprint_number: 3
+    name: "Matching & Groups"
+    start_date: "2025-12-11"
+    end_date: "2025-12-11"
+    capacity_points: 60
+    committed_points: 54
+    completed_points: 54
+    status: "completed"
+    goal: "Deliver automatic matching system and group management functionality"
+    stories:
+      - story_id: "STORY-019"
+        title: "Create Group Lambda Function"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-020"
+        title: "Add User to Group Lambda"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-021"
+        title: "Remove User from Group Lambda"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-022"
+        title: "Get Group Info Lambda"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-025"
+        title: "User Groups Query"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-030"
+        title: "Get Cashback Config Lambda"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-031"
+        title: "Get Payback Balance Lambda"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-033"
+        title: "Commission Calculation Logic"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-013"
+        title: "n8n Periodic Matching Workflow"
+        points: 8
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-014"
+        title: "Notify Buyer on Match"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-015"
+        title: "Notify Seller of Relevant Request"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-055"
+        title: "Match Notification to Buyer"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-056"
+        title: "Match Notification to Seller"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-007"
+        title: "Listing Expiration Scheduler"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+
+  - sprint_number: 4
+    name: "Cashback & Chatbot"
+    start_date: "2025-12-11"
+    end_date: "2025-12-11"
+    capacity_points: 60
+    committed_points: 52
+    completed_points: 52
+    status: "completed"
+    goal: "Complete cashback system and deliver AI chatbot for user queries"
+    stories:
+      - story_id: "STORY-032"
+        title: "Initiate Payment Flow"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-034"
+        title: "Payment Status & Confirmation"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-035"
+        title: "Distribute Cashback on Payment"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-036"
+        title: "Rollback Cashback on Refund"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-037"
+        title: "Payment History Query"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-046"
+        title: "Chatbot Message Handler"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-047"
+        title: "Chatbot Data Fetcher"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-048"
+        title: "Chatbot Messenger Integration"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-049"
+        title: "Intent Analyzer with OpenAI"
+        points: 5
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-050"
+        title: "Query Builder for Data Fetch"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-051"
+        title: "Response Formatter"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-057"
+        title: "Notification Send Service"
+        points: 3
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-058"
+        title: "Notification Templates IT/EN"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+      - story_id: "STORY-059"
+        title: "Notification History"
+        points: 2
+        status: "completed"
+        assigned_to: "claude"
+
+  - sprint_number: 5
+    name: "Polish & Enhancements"
+    start_date: "2026-01-08"
+    end_date: "2026-01-14"
+    capacity_points: 60
+    committed_points: 43
+    completed_points: 0
+    status: "not_started"
+    goal: "Complete remaining features, add enhancements, and polish for launch"
+
+velocity:
+  sprint_1: 53
+  sprint_2: 50
+  sprint_3: 54
+  sprint_4: 52
+  sprint_5: null
+  rolling_average: 52.25
+
+team:
+  size: 4
+  sprint_length_weeks: 1
+  capacity_per_sprint: 60
+  experience_level: "senior"

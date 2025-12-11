@@ -1,0 +1,299 @@
+{
+  "name": "Periodic Matching - Quofind Marketplace",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_ENDPOINT }}/requests/active",
+        "options": {}
+      },
+      "id": "get-active-requests",
+      "name": "Get Active Requests",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.total }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-requests",
+      "name": "Has Requests?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "requests",
+        "options": {}
+      },
+      "id": "split-requests",
+      "name": "Split Requests",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_ENDPOINT }}/listings",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "={{ $json.category }}"
+            },
+            {
+              "name": "maxPrice",
+              "value": "={{ $json.prezzoMax }}"
+            },
+            {
+              "name": "q",
+              "value": "={{ $json.paroleChiave ? $json.paroleChiave.join(' ') : '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "search-listings",
+      "name": "Search Matching Listings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.total }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-matches",
+      "name": "Has Matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare notification data\nconst request = $('Split Requests').first().json;\nconst listings = $input.first().json.listings;\nconst topMatch = listings[0];\n\nreturn {\n  requestId: request.id,\n  userId: request.userId,\n  matchCount: listings.length,\n  topMatch: {\n    id: topMatch.id,\n    title: topMatch.title,\n    price: topMatch.price,\n    category: topMatch.category,\n  },\n  allMatches: listings.map(l => l.id),\n};"
+      },
+      "id": "prepare-notification",
+      "name": "Prepare Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 100]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v18.0/me/messages",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": "={{ $env.FACEBOOK_PAGE_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": { \"id\": \"{{ $json.userId }}\" },\n  \"message\": {\n    \"text\": \"Trovato! {{ $json.topMatch.title }} a {{ $json.topMatch.price }}€. Totale {{ $json.matchCount }} annunci compatibili.\"\n  }\n}",
+        "options": {}
+      },
+      "id": "notify-buyer",
+      "name": "Notify Buyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 100]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "processed",
+              "value": "={{ $('Split Requests').all().length }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-result",
+      "name": "Set Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "no_requests"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "no-requests",
+      "name": "No Requests",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Active Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Requests": {
+      "main": [
+        [
+          {
+            "node": "Has Requests?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Requests?": {
+      "main": [
+        [
+          {
+            "node": "Split Requests",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Requests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Requests": {
+      "main": [
+        [
+          {
+            "node": "Search Matching Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Matching Listings": {
+      "main": [
+        [
+          {
+            "node": "Has Matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Matches?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification": {
+      "main": [
+        [
+          {
+            "node": "Notify Buyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Buyer": {
+      "main": [
+        [
+          {
+            "node": "Set Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "quofind",
+      "id": "1"
+    },
+    {
+      "name": "matching",
+      "id": "3"
+    }
+  ]
+}

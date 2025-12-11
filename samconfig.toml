@@ -1,0 +1,39 @@
+# SAM CLI Configuration
+# More info: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+
+version = 0.1
+
+[default.global.parameters]
+stack_name = "quofind-marketplace"
+resolve_s3 = true
+region = "eu-south-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+confirm_changeset = true
+fail_on_empty_changeset = false
+parameter_overrides = "Environment=dev FacebookAppId=placeholder FacebookAppSecret=placeholder FacebookPageToken=placeholder OpenAIApiKey=placeholder"
+
+[default.sync.parameters]
+watch = true
+
+[dev]
+[dev.deploy.parameters]
+stack_name = "quofind-marketplace-dev"
+parameter_overrides = "Environment=dev FacebookAppId=placeholder FacebookAppSecret=placeholder FacebookPageToken=placeholder OpenAIApiKey=placeholder"
+confirm_changeset = false
+
+[staging]
+[staging.deploy.parameters]
+stack_name = "quofind-marketplace-staging"
+parameter_overrides = "Environment=staging FacebookAppId=placeholder FacebookAppSecret=placeholder FacebookPageToken=placeholder OpenAIApiKey=placeholder"
+
+[prod]
+[prod.deploy.parameters]
+stack_name = "quofind-marketplace-prod"
+parameter_overrides = "Environment=prod FacebookAppId=placeholder FacebookAppSecret=placeholder FacebookPageToken=placeholder OpenAIApiKey=placeholder"
+confirm_changeset = true

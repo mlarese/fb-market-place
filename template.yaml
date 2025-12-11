@@ -1,0 +1,1312 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Quofind Marketplace - Facebook-based marketplace with cashback system
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 30
+    MemorySize: 256
+    Environment:
+      Variables:
+        LISTINGS_TABLE: !Ref MarketplaceListingsTable
+        REQUESTS_TABLE: !Ref MarketplaceRequestsTable
+        USERS_TABLE: !Ref MarketplaceUsersTable
+        GROUPS_TABLE: !Ref GroupsTable
+        BALANCES_TABLE: !Ref PaybackBalancesTable
+        TRANSACTIONS_TABLE: !Ref TransactionsTable
+        CASHBACK_CONFIG_TABLE: !Ref CashbackConfigTable
+        PAYMENTS_TABLE: !Ref PaymentsTable
+        NOTIFICATIONS_TABLE: !Ref NotificationsTable
+        OPENSEARCH_ENDPOINT: !GetAtt OpenSearchDomain.DomainEndpoint
+        SECRETS_ARN: !Ref MarketplaceSecrets
+        N8N_WEBHOOK_URL: !Ref N8nWebhookUrl
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  FacebookAppId:
+    Type: String
+    NoEcho: true
+  FacebookAppSecret:
+    Type: String
+    NoEcho: true
+  FacebookPageToken:
+    Type: String
+    NoEcho: true
+  OpenAIApiKey:
+    Type: String
+    NoEcho: true
+  FacebookVerifyToken:
+    Type: String
+    Default: quofind_verify_2024
+  N8nWebhookUrl:
+    Type: String
+    Default: ""
+    Description: n8n webhook URL for workflow triggers
+
+Resources:
+  # ============================================
+  # SECRETS MANAGER (STORY-068)
+  # ============================================
+  MarketplaceSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub quofind-marketplace-${Environment}-secrets
+      Description: API keys and tokens for Quofind Marketplace
+      SecretString: !Sub |
+        {
+          "FACEBOOK_APP_ID": "${FacebookAppId}",
+          "FACEBOOK_APP_SECRET": "${FacebookAppSecret}",
+          "FACEBOOK_PAGE_TOKEN": "${FacebookPageToken}",
+          "OPENAI_API_KEY": "${OpenAIApiKey}",
+          "FACEBOOK_VERIFY_TOKEN": "${FacebookVerifyToken}"
+        }
+
+  # ============================================
+  # DYNAMODB TABLES (STORY-001, 009, 018, 027-029, 045)
+  # ============================================
+
+  # STORY-001: MarketplaceListings
+  MarketplaceListingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub MarketplaceListings-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: groupId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: groupId-index
+          KeySchema:
+            - AttributeName: groupId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  # STORY-009: MarketplaceRequests
+  MarketplaceRequestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub MarketplaceRequests-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+  # STORY-045: MarketplaceUsers
+  MarketplaceUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub MarketplaceUsers-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: facebookId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: facebookId-index
+          KeySchema:
+            - AttributeName: facebookId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # STORY-018: Groups
+  GroupsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub Groups-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: groupId
+          AttributeType: S
+        - AttributeName: leaderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: groupId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: leaderId-index
+          KeySchema:
+            - AttributeName: leaderId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # STORY-027: PaybackBalances
+  PaybackBalancesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub PaybackBalances-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+
+  # STORY-028: Transactions
+  TransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub Transactions-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: transactionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: releaseDate
+          AttributeType: S
+        - AttributeName: referenceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: transactionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: status-releaseDate-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: releaseDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: referenceId-index
+          KeySchema:
+            - AttributeName: referenceId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # STORY-029: CashbackConfig
+  CashbackConfigTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub CashbackConfig-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  # ============================================
+  # OPENSEARCH (STORY-002)
+  # ============================================
+  OpenSearchDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: !Sub quofind-${Environment}
+      EngineVersion: OpenSearch_2.11
+      ClusterConfig:
+        InstanceType: t3.small.search
+        InstanceCount: 2
+        ZoneAwarenessEnabled: true
+        ZoneAwarenessConfig:
+          AvailabilityZoneCount: 2
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 20
+      EncryptionAtRestOptions:
+        Enabled: true
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+      AccessPolicies:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: es:*
+            Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/quofind-${Environment}/*
+
+  # ============================================
+  # API GATEWAY (STORY-INF-001)
+  # ============================================
+  MarketplaceApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub QuofindMarketplaceAPI-${Environment}
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: NONE
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLength":"$context.responseLength","integrationLatency":"$context.integrationLatency"}'
+
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/quofind-marketplace-${Environment}
+      RetentionInDays: 30
+
+  # ============================================
+  # LAMBDA FUNCTIONS - SPRINT 1
+  # ============================================
+
+  # STORY-064: Facebook Webhook Handler
+  FacebookWebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-facebook-webhook-${Environment}
+      Handler: functions/webhooks/index.handler
+      CodeUri: src/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceListingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        WebhookGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /webhook
+            Method: GET
+        WebhookPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /webhook
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/webhooks/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-004: AI Content Analysis
+  AIAnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-ai-analysis-${Environment}
+      Handler: functions/chatbot/index.handler
+      CodeUri: src/
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        Analyze:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /internal/analyze
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/chatbot/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-062: Token Validation (Authorizer)
+  TokenValidatorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-token-validator-${Environment}
+      Handler: middleware/index.handler
+      CodeUri: src/
+      Timeout: 10
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - middleware/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-008: DynamoDB to OpenSearch Sync
+  DynamoDBSyncFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-dynamodb-sync-${Environment}
+      Handler: functions/sync/index.handler
+      CodeUri: src/
+      Timeout: 60
+      Policies:
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref MarketplaceListingsTable
+            StreamName: !Select [3, !Split ['/', !GetAtt MarketplaceListingsTable.StreamArn]]
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+            StreamName: !Select [3, !Split ['/', !GetAtt MarketplaceRequestsTable.StreamArn]]
+        - Statement:
+            - Effect: Allow
+              Action:
+                - es:ESHttpPost
+                - es:ESHttpPut
+                - es:ESHttpDelete
+                - es:ESHttpGet
+              Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/quofind-${Environment}/*
+      Events:
+        ListingsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MarketplaceListingsTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 5
+        RequestsStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MarketplaceRequestsTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 5
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/sync/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # ============================================
+  # SPRINT 2 - LISTINGS & REQUESTS
+  # ============================================
+
+  # STORY-003, 005, 006: Listings Service
+  ListingsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-listings-${Environment}
+      Handler: functions/listings/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceListingsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - es:ESHttpGet
+                - es:ESHttpPost
+              Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/quofind-${Environment}/*
+      Events:
+        CreateListing:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /listings
+            Method: POST
+        GetListings:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /listings
+            Method: GET
+        GetListing:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /listings/{id}
+            Method: GET
+        DeleteListing:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /listings/{id}
+            Method: DELETE
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/listings/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-010, 011: Requests Service
+  RequestsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-requests-${Environment}
+      Handler: functions/requests/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+      Events:
+        CreateRequest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /requests
+            Method: POST
+        GetRequests:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /requests
+            Method: GET
+        GetActiveRequests:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /requests/active
+            Method: GET
+        GetRequest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /requests/{id}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/requests/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-060, 061: Users & Authentication Service
+  UsersFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-users-${Environment}
+      Handler: functions/users/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        FacebookLogin:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /auth/facebook
+            Method: POST
+        GetCurrentUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /users/me
+            Method: GET
+        UpdateCurrentUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /users/me
+            Method: PUT
+        GetUser:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /users/{id}
+            Method: GET
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/users/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # ============================================
+  # SPRINT 3 - GROUPS, CASHBACK, MATCHING
+  # ============================================
+
+  # STORY-019-022, 025: Groups Service
+  GroupsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-groups-${Environment}
+      Handler: functions/groups/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GroupsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+      Events:
+        CreateGroup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups
+            Method: POST
+        GetGroups:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups
+            Method: GET
+        GetGroup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups/{id}
+            Method: GET
+        AddMember:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups/{id}/members
+            Method: POST
+        RemoveMember:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups/{id}/members/{userId}
+            Method: DELETE
+        TransferLeadership:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /groups/{id}/leader
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/groups/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-030, 031, 033: Cashback Service
+  CashbackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-cashback-${Environment}
+      Handler: functions/cashback/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaybackBalancesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CashbackConfigTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GroupsTable
+      Events:
+        GetConfig:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/config
+            Method: GET
+        GetBalance:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/balance
+            Method: GET
+        GetTransactions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/transactions
+            Method: GET
+        CalculateCommission:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/calculate
+            Method: POST
+        CreditCashback:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/credit
+            Method: POST
+        DistributeGroup:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /cashback/distribute-group
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/cashback/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-013, 014, 015: Matching Service
+  MatchingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-matching-${Environment}
+      Handler: functions/matching/index.handler
+      CodeUri: src/
+      Timeout: 300
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - es:ESHttpGet
+                - es:ESHttpPost
+              Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/quofind-${Environment}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        RunMatching:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /internal/matching
+            Method: POST
+        ScheduledMatching:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Enabled: true
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/matching/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-007, 016, 035: Scheduler Service
+  SchedulerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-scheduler-${Environment}
+      Handler: functions/scheduler/index.handler
+      CodeUri: src/
+      Timeout: 300
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceListingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceRequestsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaybackBalancesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        DailySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Enabled: true
+        ManualRun:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /internal/scheduler
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/scheduler/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # ============================================
+  # SPRINT 4 - PAYMENTS, CHATBOT, NOTIFICATIONS
+  # ============================================
+
+  # STORY-032, 034, 035, 036: Payments Service
+  PaymentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-payments-${Environment}
+      Handler: functions/payments/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MarketplaceListingsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaybackBalancesTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref GroupsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        InitiatePayment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /payments
+            Method: POST
+        GetPayments:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /payments
+            Method: GET
+        GetPayment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /payments/{id}
+            Method: GET
+        ConfirmPayment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /payments/{id}/confirm
+            Method: POST
+        RefundPayment:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /payments/{id}/refund
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/payments/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-046-052: Chatbot Message Handler
+  ChatbotMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-chatbot-message-${Environment}
+      Handler: functions/chatbot/messageHandler.handler
+      CodeUri: src/
+      Timeout: 60
+      MemorySize: 512
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref PaybackBalancesTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref TransactionsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref GroupsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceListingsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        HandleMessage:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /chatbot/message
+            Method: POST
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/chatbot/messageHandler.js
+        External:
+          - "@aws-sdk/*"
+
+  # STORY-057-059: Notifications Service
+  NotificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub quofind-notifications-${Environment}
+      Handler: functions/notifications/index.handler
+      CodeUri: src/
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref NotificationsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref MarketplaceUsersTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MarketplaceSecrets
+      Events:
+        SendNotification:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /notifications/send
+            Method: POST
+        GetHistory:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /notifications/history
+            Method: GET
+        UpdatePreferences:
+          Type: Api
+          Properties:
+            RestApiId: !Ref MarketplaceApi
+            Path: /notifications/preferences
+            Method: PUT
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: es2022
+        Sourcemap: true
+        EntryPoints:
+          - functions/notifications/index.js
+        External:
+          - "@aws-sdk/*"
+
+  # Payments Table
+  PaymentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub MarketplacePayments-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: paymentId
+          AttributeType: S
+        - AttributeName: buyerId
+          AttributeType: S
+        - AttributeName: sellerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: paymentId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: buyerId-index
+          KeySchema:
+            - AttributeName: buyerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: sellerId-index
+          KeySchema:
+            - AttributeName: sellerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # Notifications Table
+  NotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub MarketplaceNotifications-${Environment}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: notificationId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: notificationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ============================================
+  # CLOUDWATCH (STORY-INF-002)
+  # ============================================
+
+  # Dashboard
+  MarketplaceDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub QuofindMarketplace-${Environment}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "API Gateway Requests",
+                "metrics": [
+                  ["AWS/ApiGateway", "Count", "ApiName", "QuofindMarketplaceAPI-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", "4XXError", ".", ".", {"stat": "Sum", "period": 300}],
+                  [".", "5XXError", ".", ".", {"stat": "Sum", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "API Gateway Latency",
+                "metrics": [
+                  ["AWS/ApiGateway", "Latency", "ApiName", "QuofindMarketplaceAPI-${Environment}", {"stat": "p50", "period": 300}],
+                  [".", ".", ".", ".", {"stat": "p95", "period": 300}],
+                  [".", ".", ".", ".", {"stat": "p99", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Invocations",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "quofind-facebook-webhook-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", ".", ".", "quofind-ai-analysis-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", ".", ".", "quofind-dynamodb-sync-${Environment}", {"stat": "Sum", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 8,
+              "y": 6,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Errors",
+                "metrics": [
+                  ["AWS/Lambda", "Errors", "FunctionName", "quofind-facebook-webhook-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", ".", ".", "quofind-ai-analysis-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", ".", ".", "quofind-dynamodb-sync-${Environment}", {"stat": "Sum", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 16,
+              "y": 6,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "title": "DynamoDB Read/Write",
+                "metrics": [
+                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "MarketplaceListings-${Environment}", {"stat": "Sum", "period": 300}],
+                  [".", "ConsumedWriteCapacityUnits", ".", ".", {"stat": "Sum", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "OpenSearch Cluster Health",
+                "metrics": [
+                  ["AWS/ES", "ClusterStatus.green", "DomainName", "quofind-${Environment}", {"stat": "Maximum", "period": 300}],
+                  [".", "ClusterStatus.yellow", ".", ".", {"stat": "Maximum", "period": 300}],
+                  [".", "ClusterStatus.red", ".", ".", {"stat": "Maximum", "period": 300}]
+                ],
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+  # Alarms
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub quofind-api-5xx-${Environment}
+      AlarmDescription: API Gateway 5XX errors > 5%
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub QuofindMarketplaceAPI-${Environment}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  ApiLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub quofind-api-latency-${Environment}
+      AlarmDescription: API Gateway p95 latency > 500ms
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub QuofindMarketplaceAPI-${Environment}
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 500
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  LambdaErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub quofind-lambda-errors-${Environment}
+      AlarmDescription: Lambda errors > 5 in 5 minutes
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Dimensions:
+        - Name: FunctionName
+          Value: !Sub quofind-facebook-webhook-${Environment}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  OpenSearchRedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub quofind-opensearch-red-${Environment}
+      AlarmDescription: OpenSearch cluster status RED
+      MetricName: ClusterStatus.red
+      Namespace: AWS/ES
+      Dimensions:
+        - Name: DomainName
+          Value: !Sub quofind-${Environment}
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${MarketplaceApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+
+  WebhookUrl:
+    Description: Facebook Webhook URL
+    Value: !Sub https://${MarketplaceApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/webhook
+
+  OpenSearchEndpoint:
+    Description: OpenSearch Domain Endpoint
+    Value: !GetAtt OpenSearchDomain.DomainEndpoint
+
+  ListingsTableArn:
+    Description: MarketplaceListings Table ARN
+    Value: !GetAtt MarketplaceListingsTable.Arn
+
+  SecretsArn:
+    Description: Secrets Manager ARN
+    Value: !Ref MarketplaceSecrets

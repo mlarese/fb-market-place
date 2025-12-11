@@ -1,0 +1,11 @@
+{
+  "name": "quofind-marketplace-functions",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@opensearch-project/opensearch": "^2.4.0",
+    "openai": "^4.20.0",
+    "axios": "^1.6.0",
+    "uuid": "^9.0.0"
+  }
+}

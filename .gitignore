@@ -1,3 +1,45 @@
-
 # YoYo AI version control directory
 .yoyo/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.aws-sam/
+.build/
+dist/
+
+# Test coverage
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# SAM CLI
+samconfig.toml.bak
+
+# Secrets (never commit)
+secrets.json
+credentials.json
+
+# Temporary files
+tmp/
+temp/
+*.tmp
