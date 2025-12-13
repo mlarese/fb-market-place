@@ -7,7 +7,7 @@ Questo progetto è una piattaforma completa di marketplace denominata Quofind, p
 - **DynamoDB**: Utilizzato come database NoSQL per memorizzare annunci, richieste e dati utente, con tabelle dedicate per isolare i dati. Questo consente un accesso rapido e una gestione efficiente dei dati.
 - **AWS Lambda**: Funzioni serverless che elaborano eventi, come la creazione di annunci o la ricerca di corrispondenze. Queste funzioni vengono attivate da eventi specifici, permettendo di ridurre i costi e migliorare la reattività del sistema.
 - **Elasticsearch (via AWS OpenSearch)**: Utilizzato per eseguire ricerche efficienti su annunci e richieste. Grazie a indici ottimizzati per campi come categoria, posizione e parole chiave, gli utenti possono trovare rapidamente ciò di cui hanno bisogno.
-- **n8n Workflows**: Integra webhook per piattaforme come Facebook e utilizza analisi AI (es. tramite OpenAI) per categorizzare contenuti e inviare notifiche multilingua. Questo consente un'interazione fluida tra il marketplace e le piattaforme esterne.
+- **Make (Integromat) Scenarios**: Integra webhook per piattaforme come Facebook e utilizza analisi AI (es. tramite OpenAI) per categorizzare contenuti e inviare notifiche multilingua. Questo consente un'interazione fluida tra il marketplace e le piattaforme esterne.
 
 Lo scopo principale è facilitare transazioni tra utenti, con funzionalità di matching automatico e gestione cashback per incoraggiare l'uso della piattaforma.
 
@@ -19,7 +19,7 @@ Prima di procedere, assicurati di avere tutti i componenti necessari installati 
 - **Node.js e npm**: Assicurati di avere installato Node.js nella versione 18.x o superiore. Puoi verificare la tua installazione eseguendo i comandi `node -v` e `npm -v`. Se non hai Node.js installato, puoi scaricarlo dal sito ufficiale [nodejs.org](https://nodejs.org) e seguire le istruzioni per l'installazione.
 - **AWS CLI**: Per interagire con i servizi AWS tramite la riga di comando, installa l'AWS CLI utilizzando il comando `curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o AWSCLIV2.pkg` su macOS. Una volta scaricato, esegui `sudo installer -pkg AWSCLIV2.pkg -target /` per completare l'installazione. Dopo l'installazione, configura l'AWS CLI utilizzando il comando `aws configure` e inserisci le tue credenziali IAM.
 - **Elasticsearch/OpenSearch**: È fondamentale avere un'istanza di Elasticsearch in esecuzione. Se utilizzi AWS, puoi creare un dominio OpenSearch e ottenere l'endpoint. Per verificare che tutto funzioni correttamente, esegui il comando `curl -X GET endpoint/_cat/indices?v` per controllare gli indici disponibili.
-- **n8n**: Se desideri utilizzare n8n per la gestione dei workflow, installalo localmente utilizzando il comando `npm install -g n8n`, oppure puoi optare per una versione hosted. Assicurati di utilizzare una versione raccomandata, come la 1.0 o superiore.
+- **Make (Integromat)**: Per la gestione dei workflow, registrati su [make.com](https://www.make.com). Make è una piattaforma cloud che non richiede installazione locale. Il free tier include 1,000 operazioni/mese.
 - **Variabili d'Ambiente**: È importante preparare le variabili d'ambiente in un file .env o nella console AWS. Queste variabili includono endpoint Elasticsearch, nomi delle tabelle DynamoDB e chiavi API (ad esempio, per OpenAI). Assicurati di non hardcodare le chiavi API, ma di utilizzare AWS Secrets Manager per una gestione sicura.
 - **Altre Dipendenze**: Assicurati di installare pacchetti npm come `aws-sdk`, `uuid` e `elasticsearch` eseguendo `npm install` in ogni directory Lambda per garantire che tutte le funzionalità siano disponibili.
 
@@ -52,11 +52,12 @@ Segui questi passi dettagliati per impostare l'infrastruttura. Ogni passo includ
    - Assicurati che Lambda possa accedere: Potrebbe essere necessario aggiungere policy di rete per consentire l'accesso alle funzioni Lambda. Questo passaggio è cruciale per garantire la comunicazione tra i tuoi servizi.
    - Errore comune: Se gli indici non esistono, potresti ricevere errori 404. Verifica sempre con curl prima di procedere con le operazioni di ricerca.
 
-5. **Imposta n8n Workflows:**
+5. **Imposta Make Scenarios:**
 
-   - Installa n8n: Esegui `n8n start` per avviarlo localmente. Questo ti permetterà di gestire i tuoi workflow in modo semplice e intuitivo.
-   - Importa file JSON da `project/n8n`: In n8n, vai su 'Workflows' e importa handleNewPost.json. Configura i nodi come webhook con URL specifici per garantire che le integrazioni funzionino correttamente.
-   - Per AI, imposta API key in n8n; usa variabili sicure per proteggere le tue credenziali.
+   - Accedi a [make.com](https://www.make.com) e crea un nuovo scenario.
+   - Configura le connessioni: Facebook Pages, OpenAI (ChatGPT), HTTP per le chiamate alle Lambda.
+   - Crea gli scenari seguendo la documentazione in `docs/MAKE.md`.
+   - Per AI, configura la connessione OpenAI con la tua API key nelle impostazioni di Make.
    - Errore comune: Se il webhook non viene attivato, verifica la configurazione e testa con strumenti come Postman per assicurarti che le richieste vengano inviate correttamente.
 
 6. **Testa l'Infrastruttura:**
@@ -266,12 +267,12 @@ Questi passaggi ti permetteranno di interagire con la tua API utilizzando Redocl
 
 ### Localizzazione degli Errori
 
-Le funzioni Lambda e il flusso n8n sono stati aggiornati per gestire la localizzazione degli errori in base alla lingua dell'utente. Questo significa che:
+Le funzioni Lambda e gli scenari Make sono stati aggiornati per gestire la localizzazione degli errori in base alla lingua dell'utente. Questo significa che:
 
 - **Funzioni Lambda**: Gli errori restituiti dalle funzioni Lambda, come `createListing` e `getPaybackBalance`, ora forniscono messaggi di errore localizzati. Ad esempio:
   - Se un campo obbligatorio è mancante, l'errore sarà restituito in italiano se la lingua è impostata su `it` o in inglese se impostata su `en`.
 
-- **Flusso n8n**: Il flusso n8n è stato modificato per includere un parametro `language` quando invia richieste all'API. Questo parametro garantisce che le risposte siano localizzate in base alla lingua dell'utente, migliorando l'esperienza utente e la comprensione degli errori.
+- **Scenari Make**: Gli scenari Make sono stati configurati per includere un parametro `language` quando inviano richieste all'API. Questo parametro garantisce che le risposte siano localizzate in base alla lingua dell'utente, migliorando l'esperienza utente e la comprensione degli errori.
 
 Assicurati di gestire correttamente la lingua dell'utente nel tuo codice per fornire messaggi di errore chiari e comprensibili.
 
@@ -321,13 +322,15 @@ Questa funzione distribuisce il cashback al capo gruppo e agli acquirenti in bas
 ## Documentazione
 Per ulteriori dettagli sulle API e sull'architettura, consultare il **MANUALE TECNICO** e il documento **GRUPPI.md**.
 
-## Flussi n8n
+## Scenari Make
 
 ### Handle New Facebook Post
-Questo flusso gestisce gli eventi dei post ricevuti da Facebook. Inizia con un webhook che riceve eventi e li elabora per creare annunci o richieste nel marketplace. Include logica per gestire post specifici per gruppo, associando i post al corretto gruppo e gestendo i cashback.
+Questo scenario gestisce gli eventi dei post ricevuti da Facebook. Inizia con un webhook che riceve eventi e li elabora per creare annunci o richieste nel marketplace. Include logica per gestire post specifici per gruppo, associando i post al corretto gruppo e gestendo i cashback.
 
 ### Periodic Request-Listing Matching
-Questo flusso esegue la corrispondenza periodica tra richieste e annunci nel marketplace. Viene eseguito ogni 5 minuti per garantire che gli utenti siano informati delle corrispondenze pertinenti. Include logica per notificare gli utenti in base alla lingua preferita e per gestire le corrispondenze specifiche del gruppo.
+Questo scenario esegue la corrispondenza periodica tra richieste e annunci nel marketplace. Viene eseguito ogni 5 minuti per garantire che gli utenti siano informati delle corrispondenze pertinenti. Include logica per notificare gli utenti in base alla lingua preferita e per gestire le corrispondenze specifiche del gruppo.
+
+Per dettagli completi sulla configurazione degli scenari Make, consulta `docs/MAKE.md`.
 
 ## Funzioni Lambda Aggiornate
 

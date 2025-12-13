@@ -32,7 +32,7 @@ This Product Requirements Document (PRD) defines the functional and non-function
 - **Integrazione completa con Facebook** (Graph API, Messenger, Marketplace)
 
 L'architettura si basa su:
-- **n8n** per orchestrazione workflow
+- **Make** per orchestrazione workflow
 - **AWS Lambda** (Node.js) per la business logic
 - **DynamoDB** per persistenza dati
 - **Elasticsearch/OpenSearch** per ricerche avanzate
@@ -258,7 +258,7 @@ Il sistema deve gestire la scadenza automatica delle richieste dopo un periodo c
 Il sistema deve eseguire matching periodico (ogni 5 minuti) tra richieste attive e annunci disponibili.
 
 **Acceptance Criteria:**
-- [ ] n8n workflow schedulato ogni 5 minuti
+- [ ] Make workflow schedulato ogni 5 minuti
 - [ ] Query richieste attive
 - [ ] Per ogni richiesta, ricerca annunci compatibili
 - [ ] Algoritmo di scoring per rilevanza
@@ -1489,7 +1489,7 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 
 ```
 1. Transazione completata su Facebook Marketplace
-2. n8n riceve conferma pagamento
+2. Make riceve conferma pagamento
 3. Sistema calcola commissione (10%)
 4. Distribuzione cashback:
    - 66% ad acquirente
@@ -1532,7 +1532,7 @@ These are preliminary stories. Detailed stories will be created in Phase 4 (Impl
 2. **User Adoption:** Gli utenti sono disposti a usare Facebook per transazioni
 3. **Payment via Facebook:** I pagamenti avvengono tramite Facebook Pay/Marketplace
 4. **OpenAI Availability:** Il servizio OpenAI rimarra disponibile con costi accettabili
-5. **n8n Scalability:** n8n puo gestire il volume di workflow previsto
+5. **Make Scalability:** Make puo gestire il volume di workflow previsto
 6. **AWS Region:** Tutti i servizi AWS saranno nella stessa region (eu-south-1)
 7. **Single Currency:** Il sistema opera inizialmente solo in EUR
 

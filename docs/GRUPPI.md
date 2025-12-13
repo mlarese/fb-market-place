@@ -72,9 +72,9 @@ Se i gruppi vengono creati esternamente su Facebook, puoi gestirli attraverso i 
 
 - **Facebook Graph API**: Utilizza l'API di Facebook Graph per interagire con i gruppi. Questo include il recupero delle informazioni del gruppo, la gestione dei membri e la pubblicazione delle offerte. Assicurati di avere le autorizzazioni necessarie e i token di accesso per interagire con l'API.
 
-- **Flussi n8n**: Puoi impostare flussi in n8n per automatizzare le interazioni con i gruppi di Facebook. Ad esempio:
-  - **Trigger Webhook**: Usa i webhook per ascoltare eventi nel gruppo Facebook (come nuovi post o commenti) e attivare flussi di lavoro in n8n per gestire questi eventi.
-  - **Attività Pianificate**: Imposta flussi di lavoro pianificati per controllare periodicamente nuove offerte o aggiornamenti nel gruppo e sincronizzarli con il marketplace.
+- **Scenari Make**: Puoi impostare scenari in Make per automatizzare le interazioni con i gruppi di Facebook. Ad esempio:
+  - **Trigger Webhook**: Usa i webhook per ascoltare eventi nel gruppo Facebook (come nuovi post o commenti) e attivare scenari in Make per gestire questi eventi.
+  - **Attività Pianificate**: Imposta scenari schedulati per controllare periodicamente nuove offerte o aggiornamenti nel gruppo e sincronizzarli con il marketplace.
 
 - **Sincronizzazione dei Dati**: Se desideri mantenere il marketplace e i gruppi di Facebook sincronizzati, puoi creare flussi di lavoro che:
   - Estraggono nuove offerte dal gruppo Facebook e creano annunci corrispondenti nel marketplace.
@@ -85,12 +85,12 @@ Se i gruppi fanno parte della piattaforma Quofind Marketplace:
 
 - **Gestione del Database**: Memorizza le informazioni sui gruppi, le offerte e i dati dei membri all'interno del tuo database (ad es. DynamoDB). Questo ti consente di gestire le attività del gruppo direttamente attraverso la tua applicazione.
 
-- **Integrazione n8n**: Utilizza n8n per gestire il flusso di informazioni tra il marketplace e i gruppi:
-  - **Creazione di Offerte**: Imposta flussi di lavoro che consentano ai capi gruppo di creare offerte che vengono automaticamente aggiunte al marketplace.
-  - **Notifiche ai Membri**: Usa flussi di lavoro per notificare i membri del gruppo riguardo nuove offerte o aggiornamenti all'interno del gruppo.
+- **Integrazione Make**: Utilizza Make per gestire il flusso di informazioni tra il marketplace e i gruppi:
+  - **Creazione di Offerte**: Imposta scenari che consentano ai capi gruppo di creare offerte che vengono automaticamente aggiunte al marketplace.
+  - **Notifiche ai Membri**: Usa scenari per notificare i membri del gruppo riguardo nuove offerte o aggiornamenti all'interno del gruppo.
 
 ### Conclusione:
-Indipendentemente dal fatto che i gruppi siano creati esternamente su Facebook o all'interno del marketplace, puoi gestirli efficacemente utilizzando l'API di Facebook Graph e i flussi di lavoro di n8n. Questa integrazione consente una comunicazione e una sincronizzazione fluida tra il marketplace e i gruppi di interesse, migliorando l'interazione degli utenti e facilitando le vendite.
+Indipendentemente dal fatto che i gruppi siano creati esternamente su Facebook o all'interno del marketplace, puoi gestirli efficacemente utilizzando l'API di Facebook Graph e gli scenari Make. Questa integrazione consente una comunicazione e una sincronizzazione fluida tra il marketplace e i gruppi di interesse, migliorando l'interazione degli utenti e facilitando le vendite.
 
 ## Sistema di Cashback per Gruppi
 

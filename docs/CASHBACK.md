@@ -386,29 +386,29 @@ lambda/
    - Costanti
    - Variabili di ambiente
 
-### Processi N8N
+### Scenari Make
 
-1. **Processo di Accreditamento Cashback**
-   - Trigger: Nuova vendita confermata
-   - Step 1: Verifica ricevimento fondi
-   - Step 2: Calcola commissioni
-   - Step 3: Accredita cashback
-   - Step 4: Notifica utente
+1. **Scenario di Accreditamento Cashback**
+   - Trigger: Nuova vendita confermata (Webhook)
+   - Step 1: Verifica ricevimento fondi (HTTP → Lambda)
+   - Step 2: Calcola commissioni (HTTP → Lambda)
+   - Step 3: Accredita cashback (HTTP → Lambda)
+   - Step 4: Notifica utente (Facebook Messenger)
 
-2. **Processo di Segnalazione Venditori**
-   - Trigger: Nuova segnalazione
-   - Step 1: Verifica validità
-   - Step 2: Registra venditore
-   - Step 3: Accredita cashback segnalatore
-   - Step 4: Notifica segnalatore
+2. **Scenario di Segnalazione Venditori**
+   - Trigger: Nuova segnalazione (Webhook)
+   - Step 1: Verifica validità (HTTP → Lambda)
+   - Step 2: Registra venditore (HTTP → Lambda)
+   - Step 3: Accredita cashback segnalatore (HTTP → Lambda)
+   - Step 4: Notifica segnalatore (Facebook Messenger)
 
-3. **Processo di Gestione Domande**
-   - Trigger: Nuova domanda
-   - Step 1: Analisi intento
-   - Step 2: Verifica autorizzazione
-   - Step 3: Recupero dati
-   - Step 4: Formattazione risposta
-   - Step 5: Invio risposta
+3. **Scenario di Gestione Domande**
+   - Trigger: Messaggio Messenger (Webhook)
+   - Step 1: Analisi intento (OpenAI)
+   - Step 2: Verifica autorizzazione (Router + Filter)
+   - Step 3: Recupero dati (HTTP → Lambda)
+   - Step 4: Formattazione risposta (Tools)
+   - Step 5: Invio risposta (Facebook Messenger)
 
 ### Esempio di Flusso
 

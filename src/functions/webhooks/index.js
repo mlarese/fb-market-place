@@ -5,8 +5,8 @@ import { getPost } from '../../lib/facebook.js';
 import { sendMessage, sendListingConfirmation } from '../../lib/messenger.js';
 import { success, badRequest, unauthorized } from '../../lib/response.js';
 
-// n8n webhook URL (configured via environment or Secrets Manager)
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
+// Make webhook URL (configured via environment or Secrets Manager)
+const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL;
 
 /**
  * Facebook Webhook Handler (STORY-064, STORY-065)
@@ -132,8 +132,8 @@ async function routeMessagingEvent(messagingEvent) {
     const text = messagingEvent.message.text;
     console.log(`[MESSENGER] Text from ${senderId}: ${text}`);
 
-    // Forward to n8n for AI processing
-    await forwardToN8n('messenger_message', {
+    // Forward to Make for AI processing
+    await forwardToMake('messenger_message', {
       senderId,
       text,
       timestamp: messagingEvent.timestamp,
@@ -168,13 +168,13 @@ async function handlePostback(senderId, payload) {
   } else if (payload.startsWith('DELETE_LISTING_')) {
     const listingId = payload.replace('DELETE_LISTING_', '');
     // Forward to delete handler
-    await forwardToN8n('delete_listing', { senderId, listingId });
+    await forwardToMake('delete_listing', { senderId, listingId });
   } else if (payload.startsWith('CONTACT_SELLER_')) {
     const listingId = payload.replace('CONTACT_SELLER_', '');
-    await forwardToN8n('contact_seller', { senderId, listingId });
+    await forwardToMake('contact_seller', { senderId, listingId });
   } else {
-    // Forward unknown postbacks to n8n
-    await forwardToN8n('postback', { senderId, payload });
+    // Forward unknown postbacks to Make
+    await forwardToMake('postback', { senderId, payload });
   }
 }
 
@@ -205,7 +205,7 @@ async function routeFeedChange(change) {
     // Post deleted
     if (item === 'post' && verb === 'remove') {
       console.log(`[FEED] Post removed: ${value.post_id}`);
-      await forwardToN8n('post_deleted', { postId: value.post_id });
+      await forwardToMake('post_deleted', { postId: value.post_id });
     }
 
     // New comment
@@ -235,8 +235,8 @@ async function handleNewPost(postData) {
     fullPost = { id: postId, message, from };
   }
 
-  // Forward to n8n workflow for AI analysis and listing creation
-  await forwardToN8n('new_post', {
+  // Forward to Make scenario for AI analysis and listing creation
+  await forwardToMake('new_post', {
     postId,
     message: fullPost.message || message,
     from: from || fullPost.from,
@@ -246,11 +246,11 @@ async function handleNewPost(postData) {
 }
 
 /**
- * Forward event to n8n webhook
+ * Forward event to Make webhook
  */
-async function forwardToN8n(eventType, data) {
-  if (!N8N_WEBHOOK_URL) {
-    console.log(`[N8N] Webhook URL not configured, skipping forward for ${eventType}`);
+async function forwardToMake(eventType, data) {
+  if (!MAKE_WEBHOOK_URL) {
+    console.log(`[MAKE] Webhook URL not configured, skipping forward for ${eventType}`);
     return;
   }
 
@@ -261,14 +261,14 @@ async function forwardToN8n(eventType, data) {
       timestamp: new Date().toISOString(),
     };
 
-    await axios.post(N8N_WEBHOOK_URL, payload, {
+    await axios.post(MAKE_WEBHOOK_URL, payload, {
       headers: { 'Content-Type': 'application/json' },
       timeout: 5000,
     });
 
-    console.log(`[N8N] Forwarded ${eventType} event`);
+    console.log(`[MAKE] Forwarded ${eventType} event`);
   } catch (err) {
-    console.error(`[N8N] Failed to forward ${eventType}:`, err.message);
+    console.error(`[MAKE] Failed to forward ${eventType}:`, err.message);
     // Don't throw - we don't want to fail the webhook response
   }
 }

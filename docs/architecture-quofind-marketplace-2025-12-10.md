@@ -21,7 +21,7 @@ This document defines the system architecture for Quofind Marketplace. It provid
 
 ## Executive Summary
 
-Quofind Marketplace utilizza un'architettura **Event-Driven Serverless** con orchestrazione centralizzata tramite n8n. Il sistema e progettato per:
+Quofind Marketplace utilizza un'architettura **Event-Driven Serverless** con orchestrazione centralizzata tramite Make. Il sistema e progettato per:
 
 - Gestire interazioni asincrone con l'ecosistema Facebook
 - Scalare automaticamente in base al carico
@@ -30,7 +30,7 @@ Quofind Marketplace utilizza un'architettura **Event-Driven Serverless** con orc
 - Processare analisi AI in tempo reale
 
 **Key Architectural Decisions:**
-1. n8n come orchestratore centrale di tutti i workflow
+1. Make come orchestratore centrale di tutti i workflow
 2. AWS Lambda per business logic stateless
 3. DynamoDB per persistenza ad alta velocita
 4. OpenSearch per ricerche full-text
@@ -62,7 +62,7 @@ L'intero sistema dipende dall'ecosistema Facebook. Tutte le interazioni utente a
 Il sistema deve processare eventi asincroni (post, messaggi) con bassa latenza.
 
 **Implicazioni:**
-- n8n webhooks per ricezione eventi
+- Make webhooks per ricezione eventi
 - Lambda per elaborazione parallela
 - Caching per query frequenti
 
@@ -110,7 +110,7 @@ Il sistema di cashback richiede consistenza transazionale.
                               └───────────────┬───────────────┘
                                               │
                 ┌─────────────────────────────▼─────────────────────────────┐
-                │                    n8n ORCHESTRATOR                       │
+                │                    Make ORCHESTRATOR                       │
                 │                  (Workflow Engine)                        │
                 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐      │
                 │  │Handle New    │ │Periodic      │ │Payment       │      │
@@ -166,7 +166,7 @@ Il sistema di cashback richiede consistenza transazionale.
 │  │         AWS S3                     │    │      AWS Secrets Manager          │   │
 │  │  - images/                         │    │  - facebook-api-token             │   │
 │  │  - attachments/                    │    │  - openai-api-key                 │   │
-│  └────────────────────────────────────┘    │  - n8n-credentials                │   │
+│  └────────────────────────────────────┘    │  - Make-credentials                │   │
 │                                            └────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 
@@ -186,8 +186,8 @@ Il sistema di cashback richiede consistenza transazionale.
 **Rationale:**
 1. **Event-Driven:** Il sistema reagisce a eventi esterni (post Facebook, messaggi Messenger, conferme pagamento) piuttosto che gestire richieste sincrone
 2. **Serverless:** AWS Lambda elimina la gestione dell'infrastruttura, scala automaticamente, e costa solo quando eseguito
-3. **Workflow Orchestration:** n8n centralizza la logica decisionale complessa, rendendo i workflow visibili e modificabili senza deploy
-4. **Separation of Concerns:** Lambda functions sono stateless e single-purpose, n8n gestisce la coordinazione
+3. **Workflow Orchestration:** Make centralizza la logica decisionale complessa, rendendo i workflow visibili e modificabili senza deploy
+4. **Separation of Concerns:** Lambda functions sono stateless e single-purpose, Make gestisce la coordinazione
 
 ---
 
@@ -195,9 +195,9 @@ Il sistema di cashback richiede consistenza transazionale.
 
 ### Backend / Orchestration
 
-#### n8n Workflow Engine
+#### Make Workflow Engine
 
-**Choice:** n8n (self-hosted su EC2 o container)
+**Choice:** Make (self-hosted su EC2 o container)
 
 **Version:** 1.0+
 
@@ -210,18 +210,15 @@ Il sistema di cashback richiede consistenza transazionale.
 
 **Configuration:**
 ```yaml
-# n8n environment
-N8N_HOST: n8n.quofind.internal
-N8N_PORT: 5678
-N8N_PROTOCOL: https
-WEBHOOK_URL: https://webhooks.quofind.com
-EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
-EXECUTIONS_DATA_SAVE_ON_ERROR: all
+# Make (Integromat) - Cloud-based, no hosting required
+MAKE_WEBHOOK_URL: https://hook.eu1.make.com/your-webhook-id
+MAKE_REGION: eu1  # or us1, us2
+# Note: Make is fully managed - no server configuration needed
 ```
 
 **Trade-offs:**
-- **Gain:** Controllo completo, visual debugging, no vendor lock-in
-- **Lose:** Responsabilita hosting, necessita backup/monitoring custom
+- **Gain:** Zero hosting/maintenance, built-in Facebook/OpenAI modules, visual debugging
+- **Lose:** Costi per operazione (dopo free tier), dipendenza da vendor cloud
 
 ---
 
@@ -392,7 +389,7 @@ const completion = await openai.chat.completions.create({
 **Responsibilities:**
 - Receive webhook events from Facebook (posts, messages)
 - Validate webhook signatures
-- Route events to appropriate n8n workflows
+- Route events to appropriate Make workflows
 - Send messages via Messenger API
 - Publish posts via Graph API
 
@@ -427,7 +424,7 @@ function verifySignature(req) {
 
 ---
 
-### Component 2: n8n Orchestrator
+### Component 2: Make Orchestrator
 
 **Purpose:** Central workflow engine managing all business logic flows
 
@@ -844,7 +841,7 @@ Attributes:
 
 1. CREATE LISTING FLOW
    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-   │ Facebook │───►│   n8n    │───►│  Lambda  │───►│ DynamoDB │
+   │ Facebook │───►│   Make    │───►│  Lambda  │───►│ DynamoDB │
    │   Post   │    │ Workflow │    │ create   │    │          │
    └──────────┘    └──────────┘    └────┬─────┘    └──────────┘
                                         │
@@ -1600,9 +1597,9 @@ function authorize(requiredRole) {
 
 ### Internal Integrations
 
-**n8n → Lambda (via API Gateway)**
+**Make → Lambda (via API Gateway)**
 ```
-n8n HTTP Request Node → API Gateway → Lambda
+Make HTTP Request Node → API Gateway → Lambda
 Headers: { "X-Internal-Key": "..." }
 ```
 
@@ -1642,7 +1639,7 @@ DynamoDB Table (Listings)
 **Scheduled Events**
 ```
 EventBridge Rule (cron)
-    → n8n Webhook
+    → Make Webhook
     → Matching Workflow
 ```
 
@@ -1680,7 +1677,7 @@ quofind-marketplace/
 │       ├── es.js
 │       ├── errors.js
 │       └── localization.js
-├── n8n/
+├── Make/
 │   ├── workflows/
 │   │   ├── handle-new-post.json
 │   │   ├── periodic-matching.json
@@ -1708,7 +1705,7 @@ quofind-marketplace/
 **Integration Tests:**
 - Lambda with real DynamoDB (local)
 - API Gateway integration
-- n8n workflow execution
+- Make workflow execution
 
 **E2E Tests:**
 - Full flow: Post → Listing → Search → Notification
@@ -1770,7 +1767,7 @@ jobs:
 
 | FR ID | FR Name | Components | Status |
 |-------|---------|------------|--------|
-| FR-001 | Create Listing via FB Post | Facebook Layer, n8n, Listings Service | Covered |
+| FR-001 | Create Listing via FB Post | Facebook Layer, Make, Listings Service | Covered |
 | FR-002 | AI Content Analysis | Chatbot Service (intentAnalyzer), OpenAI | Covered |
 | FR-003 | Listing Persistence | Listings Service, DynamoDB, OpenSearch | Covered |
 | FR-004 | Search Listings | Listings Service, OpenSearch | Covered |
@@ -1780,10 +1777,10 @@ jobs:
 | FR-008 | AI Request Analysis | Chatbot Service | Covered |
 | FR-009 | Manage Active Requests | Requests Service | Covered |
 | FR-010 | Request Expiration | Requests Service, EventBridge | Covered |
-| FR-011 | Periodic Matching | n8n (matching workflow) | Covered |
-| FR-012 | Notify Buyers | n8n, Messenger API | Covered |
-| FR-013 | Notify Sellers | n8n, Messenger API | Covered |
-| FR-014 | Group-based Matching | n8n, Groups Service | Covered |
+| FR-011 | Periodic Matching | Make (matching workflow) | Covered |
+| FR-012 | Notify Buyers | Make, Messenger API | Covered |
+| FR-013 | Notify Sellers | Make, Messenger API | Covered |
+| FR-014 | Group-based Matching | Make, Groups Service | Covered |
 | FR-015 | Create Groups | Groups Service | Covered |
 | FR-016 | Group Leader Role | Groups Service, Auth | Covered |
 | FR-017 | Manage Members | Groups Service | Covered |
@@ -1793,7 +1790,7 @@ jobs:
 | FR-021-029 | Cashback System | Cashback Service | Covered |
 | FR-030-032 | Referral System | Cashback Service, Users | Covered |
 | FR-033-040 | Chatbot | Chatbot Service | Covered |
-| FR-041-044 | Notifications | n8n, Messenger API | Covered |
+| FR-041-044 | Notifications | Make, Messenger API | Covered |
 | FR-045-047 | Authentication | Auth middleware, Facebook Login | Covered |
 | FR-048-050 | Facebook Integration | Facebook Layer | Covered |
 
@@ -1822,9 +1819,9 @@ jobs:
 
 ## Trade-offs & Decision Log
 
-### Decision 1: n8n vs Pure Lambda Orchestration
+### Decision 1: Make vs Pure Lambda Orchestration
 
-**Choice:** n8n for workflow orchestration
+**Choice:** Make for workflow orchestration
 
 **Trade-off:**
 - **Gain:** Visual workflow design, easy modification, built-in scheduling
@@ -1876,7 +1873,7 @@ jobs:
 |----|-------|--------|------------|--------|
 | R1 | Facebook API changes | High | Monitor changelog, abstraction layer | Open |
 | R2 | OpenAI cost at scale | Medium | Monitor usage, implement fallbacks | Open |
-| R3 | n8n single point of failure | Medium | Docker with auto-restart, monitoring | Open |
+| R3 | Make single point of failure | Medium | Docker with auto-restart, monitoring | Open |
 | R4 | DynamoDB hot partitions | Low | Proper partition key design | Mitigated |
 | R5 | Facebook rate limits | Medium | Queuing, backoff, monitoring | Open |
 
@@ -1907,7 +1904,7 @@ jobs:
 
 ### Short-term (6 months)
 - Add ElastiCache Redis for caching
-- Implement CI/CD for n8n workflows
+- Implement CI/CD for Make workflows
 - Add more languages (Spanish, German)
 
 ### Medium-term (12 months)
@@ -1969,7 +1966,7 @@ Run `/sprint-planning` to:
 
 | Category | Option | Pros | Cons | Decision |
 |----------|--------|------|------|----------|
-| Orchestration | n8n | Visual, open-source | Self-hosted | Selected |
+| Orchestration | Make | Visual, open-source | Self-hosted | Selected |
 | Orchestration | Step Functions | AWS native | Complex, verbose | Rejected |
 | Database | DynamoDB | Serverless, fast | No JOINs | Selected |
 | Database | PostgreSQL | Flexible queries | Needs server | Rejected |
@@ -1989,7 +1986,7 @@ Run `/sprint-planning` to:
 | OpenSearch | 2x t3.small | ~$150/month |
 | API Gateway | On-demand | ~$20/month |
 | S3 | 10GB | ~$1/month |
-| n8n (EC2) | t3.small | ~$20/month |
+| Make (EC2) | t3.small | ~$20/month |
 | **Total** | | **~$270/month** |
 
 ### Growth Projection (Month 6-12)

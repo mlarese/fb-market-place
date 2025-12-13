@@ -4,7 +4,7 @@ Description: Quofind Marketplace - Facebook-based marketplace with cashback syst
 
 Globals:
   Function:
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Timeout: 30
     MemorySize: 128  # Minimo per costo, ARM64 20% cheaper
     Architectures:
@@ -22,7 +22,7 @@ Globals:
         NOTIFICATIONS_TABLE: !Ref NotificationsTable
         OPENSEARCH_ENDPOINT: !GetAtt OpenSearchDomain.DomainEndpoint
         SECRETS_ARN: !Ref MarketplaceSecrets
-        N8N_WEBHOOK_URL: !Ref N8nWebhookUrl
+        MAKE_WEBHOOK_URL: !Ref MakeWebhookUrl
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
 
 Parameters:
@@ -45,10 +45,10 @@ Parameters:
   FacebookVerifyToken:
     Type: String
     Default: quofind_verify_2024
-  N8nWebhookUrl:
+  MakeWebhookUrl:
     Type: String
     Default: ""
-    Description: n8n webhook URL for workflow triggers
+    Description: Make (Integromat) webhook URL for workflow triggers
 
 Resources:
   # ============================================
@@ -347,15 +347,6 @@ Resources:
         AllowOrigin: "'*'"
       Auth:
         DefaultAuthorizer: NONE
-      AccessLogSetting:
-        DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
-        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLength":"$context.responseLength","integrationLatency":"$context.integrationLatency"}'
-
-  ApiGatewayLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub /aws/apigateway/quofind-marketplace-${Environment}
-      RetentionInDays: 7  # Ridotto per costo (30 giorni costa di più)
 
   # ============================================
   # LAMBDA FUNCTIONS - SPRINT 1
@@ -1178,185 +1169,6 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
-
-  # ============================================
-  # CLOUDWATCH (STORY-INF-002)
-  # ============================================
-
-  # Dashboard
-  MarketplaceDashboard:
-    Type: AWS::CloudWatch::Dashboard
-    Properties:
-      DashboardName: !Sub QuofindMarketplace-${Environment}
-      DashboardBody: !Sub |
-        {
-          "widgets": [
-            {
-              "type": "metric",
-              "x": 0,
-              "y": 0,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "title": "API Gateway Requests",
-                "metrics": [
-                  ["AWS/ApiGateway", "Count", "ApiName", "QuofindMarketplaceAPI-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", "4XXError", ".", ".", {"stat": "Sum", "period": 300}],
-                  [".", "5XXError", ".", ".", {"stat": "Sum", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "x": 12,
-              "y": 0,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "title": "API Gateway Latency",
-                "metrics": [
-                  ["AWS/ApiGateway", "Latency", "ApiName", "QuofindMarketplaceAPI-${Environment}", {"stat": "p50", "period": 300}],
-                  [".", ".", ".", ".", {"stat": "p95", "period": 300}],
-                  [".", ".", ".", ".", {"stat": "p99", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "x": 0,
-              "y": 6,
-              "width": 8,
-              "height": 6,
-              "properties": {
-                "title": "Lambda Invocations",
-                "metrics": [
-                  ["AWS/Lambda", "Invocations", "FunctionName", "quofind-facebook-webhook-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", ".", ".", "quofind-ai-analysis-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", ".", ".", "quofind-dynamodb-sync-${Environment}", {"stat": "Sum", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "x": 8,
-              "y": 6,
-              "width": 8,
-              "height": 6,
-              "properties": {
-                "title": "Lambda Errors",
-                "metrics": [
-                  ["AWS/Lambda", "Errors", "FunctionName", "quofind-facebook-webhook-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", ".", ".", "quofind-ai-analysis-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", ".", ".", "quofind-dynamodb-sync-${Environment}", {"stat": "Sum", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "x": 16,
-              "y": 6,
-              "width": 8,
-              "height": 6,
-              "properties": {
-                "title": "DynamoDB Read/Write",
-                "metrics": [
-                  ["AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "MarketplaceListings-${Environment}", {"stat": "Sum", "period": 300}],
-                  [".", "ConsumedWriteCapacityUnits", ".", ".", {"stat": "Sum", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            },
-            {
-              "type": "metric",
-              "x": 0,
-              "y": 12,
-              "width": 12,
-              "height": 6,
-              "properties": {
-                "title": "OpenSearch Cluster Health",
-                "metrics": [
-                  ["AWS/ES", "ClusterStatus.green", "DomainName", "quofind-${Environment}", {"stat": "Maximum", "period": 300}],
-                  [".", "ClusterStatus.yellow", ".", ".", {"stat": "Maximum", "period": 300}],
-                  [".", "ClusterStatus.red", ".", ".", {"stat": "Maximum", "period": 300}]
-                ],
-                "region": "${AWS::Region}"
-              }
-            }
-          ]
-        }
-
-  # Alarms
-  ApiGateway5xxAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub quofind-api-5xx-${Environment}
-      AlarmDescription: API Gateway 5XX errors > 5%
-      MetricName: 5XXError
-      Namespace: AWS/ApiGateway
-      Dimensions:
-        - Name: ApiName
-          Value: !Sub QuofindMarketplaceAPI-${Environment}
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 2
-      Threshold: 5
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-
-  ApiLatencyAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub quofind-api-latency-${Environment}
-      AlarmDescription: API Gateway p95 latency > 500ms
-      MetricName: Latency
-      Namespace: AWS/ApiGateway
-      Dimensions:
-        - Name: ApiName
-          Value: !Sub QuofindMarketplaceAPI-${Environment}
-      ExtendedStatistic: p95
-      Period: 300
-      EvaluationPeriods: 3
-      Threshold: 500
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-
-  LambdaErrorsAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub quofind-lambda-errors-${Environment}
-      AlarmDescription: Lambda errors > 5 in 5 minutes
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Dimensions:
-        - Name: FunctionName
-          Value: !Sub quofind-facebook-webhook-${Environment}
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 5
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-
-  OpenSearchRedAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub quofind-opensearch-red-${Environment}
-      AlarmDescription: OpenSearch cluster status RED
-      MetricName: ClusterStatus.red
-      Namespace: AWS/ES
-      Dimensions:
-        - Name: DomainName
-          Value: !Sub quofind-${Environment}
-      Statistic: Maximum
-      Period: 60
-      EvaluationPeriods: 1
-      Threshold: 1
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      TreatMissingData: notBreaching
 
 Outputs:
   ApiEndpoint:

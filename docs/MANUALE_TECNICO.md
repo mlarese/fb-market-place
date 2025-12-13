@@ -2,19 +2,19 @@
 
 ## Introduzione
 
-Questo documento descrive in dettaglio l'architettura tecnica e i flussi operativi del progetto Marketplace Quofind, una piattaforma privata di compravendita basata su Facebook. La logica del sistema è orchestrata interamente da n8n, un potente workflow engine open-source, che gestisce l'interazione tra venditori e acquirenti, l'analisi dei contenuti tramite intelligenza artificiale, la gestione del cashback e la persistenza dei dati. Le AWS Lambda fungono esclusivamente da servizi per l'accesso e la modifica dei dati su DynamoDB ed Elasticsearch, garantendo un'architettura scalabile e reattiva.
+Questo documento descrive in dettaglio l'architettura tecnica e i flussi operativi del progetto Marketplace Quofind, una piattaforma privata di compravendita basata su Facebook. La logica del sistema è orchestrata da Make (precedentemente Integromat), una potente piattaforma di automazione cloud-based, che gestisce l'interazione tra venditori e acquirenti, l'analisi dei contenuti tramite intelligenza artificiale, la gestione del cashback e la persistenza dei dati. Le AWS Lambda fungono esclusivamente da servizi per l'accesso e la modifica dei dati su DynamoDB ed Elasticsearch, garantendo un'architettura scalabile e reattiva.
 
-n8n permette di automatizzare processi complessi attraverso flussi visuali, facilitando la creazione e la gestione di workflow che coinvolgono più servizi e API. In questo progetto, n8n governa l'intera logica decisionale, effettuando richieste a servizi esterni, come sistemi di intelligenza artificiale, interrogando la Facebook Graph API e coordinando l'uso delle funzioni Lambda per l'elaborazione dei dati.
+Make permette di automatizzare processi complessi attraverso scenari visuali, facilitando la creazione e la gestione di workflow che coinvolgono più servizi e API. In questo progetto, Make governa l'intera logica decisionale, effettuando richieste a servizi esterni, come sistemi di intelligenza artificiale, interrogando la Facebook Graph API e coordinando l'uso delle funzioni Lambda per l'elaborazione dei dati.
 
 AWS (Amazon Web Services) è la piattaforma cloud scelta per l'esecuzione delle funzioni serverless. Le AWS Lambda, scritte in Node.js, interagiscono con DynamoDB, un database NoSQL altamente scalabile, ed Elasticsearch, un motore di ricerca full-text che consente di effettuare ricerche rapide e flessibili tramite parole chiave. Le funzioni Lambda vengono esposte tramite AWS API Gateway, che fornisce endpoint HTTP pubblici per l'accesso alle API.
 
-Facebook Graph API consente a n8n di leggere e scrivere contenuti nei post e nei messaggi Messenger, facilitando la comunicazione tra utenti e il sistema, e inviando notifiche automatiche quando ci sono aggiornamenti rilevanti.
+Facebook Graph API consente a Make di leggere e scrivere contenuti nei post e nei messaggi Messenger, facilitando la comunicazione tra utenti e il sistema, e inviando notifiche automatiche quando ci sono aggiornamenti rilevanti.
 
-Il sistema sfrutta gli acquisti eseguiti all'interno di Facebook Marketplace, con pagamenti effettuati tramite metodi integrati come Facebook Pay. n8n riceve i dati solo dopo la conferma dell'acquisto per gestire il cashback, garantendo che l'intero processo rimanga interno all'ecosistema Facebook, con una piena integrazione nei flussi automatizzati.
+Il sistema sfrutta gli acquisti eseguiti all'interno di Facebook Marketplace, con pagamenti effettuati tramite metodi integrati come Facebook Pay. Make riceve i dati solo dopo la conferma dell'acquisto per gestire il cashback, garantendo che l'intero processo rimanga interno all'ecosistema Facebook, con una piena integrazione negli scenari automatizzati.
 
 ## Tecnologie scelte
 
-- **Workflow Engine**: n8n è utilizzato per orchestrare i flussi di lavoro, consentendo l'automazione di processi complessi attraverso un'interfaccia grafica intuitiva. Questo strumento è fondamentale per la gestione delle interazioni tra i vari componenti del sistema e per la logica decisionale.
+- **Workflow Engine**: Make (Integromat) è utilizzato per orchestrare gli scenari di automazione, consentendo l'automazione di processi complessi attraverso un'interfaccia drag-and-drop intuitiva. Questa piattaforma cloud è fondamentale per la gestione delle interazioni tra i vari componenti del sistema e per la logica decisionale, senza necessità di hosting o manutenzione server.
 
 - **Business Logic**: AWS Lambda, scritte in Node.js, gestiscono la logica di business, permettendo di eseguire codice in risposta a eventi senza la necessità di gestire server. Questo approccio serverless riduce i costi operativi e migliora la scalabilità del sistema.
 
@@ -30,35 +30,37 @@ Il sistema sfrutta gli acquisti eseguiti all'interno di Facebook Marketplace, co
 
 - **File/Immagini**: Amazon S3 è utilizzato per la gestione e l'archiviazione di file e immagini, garantendo un accesso sicuro e scalabile ai contenuti multimediali.
 
-## Flussi n8n
+## Scenari Make
 
 ### Handle New Facebook Post
-Questo flusso gestisce gli eventi dei post ricevuti da Facebook. Inizia con un webhook che riceve eventi e li elabora per creare annunci o richieste nel marketplace. Include logica per gestire post specifici per gruppo, associando i post al corretto gruppo e gestendo i cashback.
+Questo scenario gestisce gli eventi dei post ricevuti da Facebook. Inizia con un webhook che riceve eventi e li elabora per creare annunci o richieste nel marketplace. Include logica per gestire post specifici per gruppo, associando i post al corretto gruppo e gestendo i cashback.
 
 ### Periodic Request-Listing Matching
-Questo flusso esegue la corrispondenza periodica tra richieste e annunci nel marketplace. Viene eseguito ogni 5 minuti per garantire che gli utenti siano informati delle corrispondenze pertinenti. Include logica per notificare gli utenti in base alla lingua preferita e per gestire le corrispondenze specifiche del gruppo.
+Questo scenario esegue la corrispondenza periodica tra richieste e annunci nel marketplace. Viene eseguito ogni 5 minuti tramite lo scheduler integrato di Make per garantire che gli utenti siano informati delle corrispondenze pertinenti. Include logica per notificare gli utenti in base alla lingua preferita e per gestire le corrispondenze specifiche del gruppo.
+
+Per dettagli completi sulla configurazione degli scenari Make, consulta `docs/MAKE.md`.
 
 ## Descrizione generale del flusso
 
-n8n si occupa di:
+Make si occupa di:
 
 - Intercettare contenuti pubblicati su Facebook, analizzandoli per estrarne informazioni utili.
-- Analizzare semanticamente i contenuti tramite un sistema di intelligenza artificiale, per garantire che le informazioni siano correttamente interpretate e utilizzate.
+- Analizzare semanticamente i contenuti tramite OpenAI (GPT-4), per garantire che le informazioni siano correttamente interpretate e utilizzate.
 - Decidere le azioni successive in base ai risultati dell'analisi, come la creazione di annunci o la gestione delle richieste.
 - Invocare le funzioni Lambda per la lettura e la scrittura dei dati su DynamoDB ed Elasticsearch, assicurando che le informazioni siano sempre aggiornate e disponibili.
-- Inviare notifiche agli utenti tramite Messenger o post, mantenendo gli utenti informati su aggiornamenti e interazioni.
+- Inviare notifiche agli utenti tramite Facebook Messenger, mantenendo gli utenti informati su aggiornamenti e interazioni.
 
 Le AWS Lambda restano funzioni semplici, senza logica applicativa, limitandosi all'interazione con DynamoDB e Elasticsearch, rendendo il sistema più modulare e facile da gestire.
 
 ## Analisi dei contenuti
 
-Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenza artificiale con un prompt predefinito che richiede l'estrazione di tipo, categoria, prezzo, località, parole chiave e note. Questo processo è cruciale per garantire che le informazioni siano correttamente interpretate e utilizzate per le operazioni successive. Il risultato, un oggetto JSON, guida l'azione successiva di n8n, permettendo una gestione fluida e automatizzata delle informazioni.
+Quando Make riceve testi da post o messaggi, li inoltra al modulo OpenAI (ChatGPT) con un prompt predefinito che richiede l'estrazione di tipo, categoria, prezzo, località, parole chiave e note. Questo processo è cruciale per garantire che le informazioni siano correttamente interpretate e utilizzate per le operazioni successive. Il risultato, un oggetto JSON, guida l'azione successiva dello scenario Make, permettendo una gestione fluida e automatizzata delle informazioni.
 
 ## Flussi principali
 
 ### Annuncio di vendita
 
-1. **Ricezione di un post da parte del venditore**: n8n intercetta il post pubblicato dal venditore su Facebook, avviando il processo di analisi e gestione dell'annuncio. L'intercettazione avviene tramite webhook configurati per ricevere notifiche in tempo reale.
+1. **Ricezione di un post da parte del venditore**: Make intercetta il post pubblicato dal venditore su Facebook, avviando il processo di analisi e gestione dell'annuncio. L'intercettazione avviene tramite webhook configurati per ricevere notifiche in tempo reale.
 
 2. **Invio testo al sistema di intelligenza artificiale**: il testo del post viene inviato al sistema di intelligenza artificiale (AI) per l'analisi, permettendo l'estrazione di informazioni chiave necessarie per la creazione dell'annuncio.
 
@@ -66,7 +68,7 @@ Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenz
 
 4. **Salvataggio con Lambda "createListing"**: i dati estratti vengono salvati nel database DynamoDB tramite la funzione Lambda chiamata "createListing", responsabile della creazione di un nuovo record nel database.
 
-5. **Pubblicazione post via Graph API**: una volta che l'annuncio è stato creato e salvato, n8n utilizza la Facebook Graph API per pubblicare l'annuncio sulla piattaforma, rendendolo visibile agli altri utenti di Facebook.
+5. **Pubblicazione post via Graph API**: una volta che l'annuncio è stato creato e salvato, Make utilizza il modulo Facebook Pages per pubblicare l'annuncio sulla piattaforma, rendendolo visibile agli altri utenti di Facebook.
 
 6. **Conferma via Messenger**: il venditore riceve una conferma dell'avvenuta pubblicazione dell'annuncio tramite Messenger, informandolo sullo stato del proprio annuncio.
 
@@ -74,7 +76,7 @@ Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenz
 
 ### Richiesta di acquisto
 
-1. **Ricezione di un messaggio da parte dellʼacquirente**: n8n riceve un messaggio da un potenziale acquirente che esprime interesse per un prodotto, contenente dettagli specifici riguardo alla richiesta.
+1. **Ricezione di un messaggio da parte dellʼacquirente**: Make riceve un messaggio da un potenziale acquirente che esprime interesse per un prodotto, contenente dettagli specifici riguardo alla richiesta.
 
 2. **Invio testo al sistema di intelligenza artificiale**: il testo del messaggio viene inviato al sistema di intelligenza artificiale per l'analisi, consentendo l'identificazione delle informazioni chiave necessarie per elaborare la richiesta.
 
@@ -82,7 +84,7 @@ Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenz
 
 4. **Salvataggio richiesta**: la richiesta viene salvata nel sistema, creando un record utilizzabile per future elaborazioni e ricerche.
 
-5. **Ricerca compatibilità**: n8n cerca annunci compatibili utilizzando la funzione "searchListings", interrogando il database per trovare annunci che soddisfano i criteri specificati dall'acquirente.
+5. **Ricerca compatibilità**: Make cerca annunci compatibili utilizzando il modulo HTTP per chiamare la funzione "searchListings", interrogando il database per trovare annunci che soddisfano i criteri specificati dall'acquirente.
 
 6. **Invio risultati o salvataggio richiesta**: i risultati della ricerca vengono inviati all'acquirente, oppure la richiesta viene salvata per future ricerche se non ci sono corrispondenze immediate.
 
@@ -90,7 +92,7 @@ Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenz
 
 ### Matching periodico (ogni 5 minuti)
 
-1. **Recupero richieste attive**: n8n esegue una scansione delle richieste attive nel sistema per identificare quali siano ancora valide e necessitino di attenzione.
+1. **Recupero richieste attive**: Make esegue una scansione delle richieste attive nel sistema tramite lo scheduler integrato per identificare quali siano ancora valide e necessitino di attenzione.
 
 2. **Ricerca annunci compatibili**: vengono cercati annunci che corrispondono alle richieste attive, utilizzando criteri di corrispondenza basati sulle informazioni estratte.
 
@@ -102,7 +104,7 @@ Quando n8n riceve testi da post o messaggi, li inoltra al sistema di intelligenz
 
 2. **Invio messaggio anonimo via Messenger**: i venditori ricevono notifiche sulle richieste pertinenti, mantenendo l'anonimato dell'acquirente fino a quando non si avvia una conversazione.
 
-3. **Se risposta positiva, creazione assistita dell'annuncio**: se il venditore risponde positivamente, n8n assiste nella creazione dell'annuncio tramite un sistema di intelligenza artificiale, facilitando il processo di pubblicazione.
+3. **Se risposta positiva, creazione assistita dell'annuncio**: se il venditore risponde positivamente, Make assiste nella creazione dell'annuncio tramite il modulo OpenAI, facilitando il processo di pubblicazione.
 
 ### Gestione cashback
 
@@ -416,7 +418,7 @@ Il sistema implementa una gestione degli errori robusta per garantire che eventu
 
 ## Test e Validazione
 
-Per garantire l'affidabilità del sistema, vengono implementati test unitari e di integrazione per le funzioni Lambda e i workflow di n8n. Questi test aiutano a identificare eventuali problemi prima del rilascio e garantiscono che le modifiche future non introducano regressioni nel sistema.
+Per garantire l'affidabilità del sistema, vengono implementati test unitari e di integrazione per le funzioni Lambda e gli scenari Make. Questi test aiutano a identificare eventuali problemi prima del rilascio e garantiscono che le modifiche future non introducano regressioni nel sistema.
 
 ## Considerazioni sulla Scalabilità
 

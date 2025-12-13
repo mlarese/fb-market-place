@@ -1,0 +1,593 @@
+{
+    "name": "Quofind - Daily Cleanup & Maintenance",
+    "flow": [
+        {
+            "id": 1,
+            "module": "builtin:BasicScheduler",
+            "version": 1,
+            "parameters": {
+                "time": "03:00"
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "notes": {
+                        "text": "SCHEDULER GIORNALIERO - 3:00 AM\n\nQuesto modulo avvia lo scenario automaticamente ogni giorno alle 3:00 AM (ora locale).\n\nPERCHÉ LE 3 AM:\n- Orario con minimo traffico utenti\n- Riduce impatto sulle performance\n- Permette elaborazione prima della mattina\n- Utenti vedono notifiche al risveglio\n\nFREQUENZA: Una volta al giorno\n\nCOSA FA QUESTO SCENARIO:\n1. Rilascia cashback pendenti (dopo periodo grazia)\n2. Scade listing inattivi (dopo 30 giorni)\n3. Scade richieste non soddisfatte (dopo 14 giorni)\n4. Notifica utenti delle scadenze\n5. Archivia/elimina dati obsoleti\n\nCONFIGURAZIONE:\n- Timezone: Assicurati che Make usi il fuso orario corretto (Europe/Rome)\n- Vai in Scenario Settings → Scheduling → Timezone",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {
+                "else": 0
+            },
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "notes": {
+                        "text": "ROUTER PRINCIPALE - 4 FLUSSI PARALLELI\n\nQuesto router esegue 4 operazioni di manutenzione in parallelo:\n\n→ ROUTE 1: Rilascio Cashback Pendenti\n  Processa cashback in attesa da >7 giorni\n  Li converte in 'available' per prelievo\n\n→ ROUTE 2: Scadenza Listing Inattivi\n  Listing senza attività da >30 giorni\n  Li marca come 'expired' e notifica venditori\n\n→ ROUTE 3: Scadenza Richieste\n  Richieste aperte da >14 giorni senza match\n  Le chiude e notifica compratori\n\n→ ROUTE 4: Cleanup Dati Obsoleti\n  Rimuove record vecchi non più necessari\n  Mantiene il database snello\n\nTutte le route vengono eseguite in parallelo per efficienza.\nOgni route ha i suoi error handler indipendenti.",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 3,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/pending",
+                                "method": "GET",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "olderThanDays",
+                                        "value": "7"
+                                    },
+                                    {
+                                        "name": "status",
+                                        "value": "pending"
+                                    }
+                                ],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": -450,
+                                    "notes": {
+                                        "text": "RECUPERA CASHBACK PENDENTI\n\nChiama l'API per ottenere tutti i cashback in stato 'pending' che sono pronti per essere rilasciati.\n\nENDPOINT: GET /cashback/pending\n\nPARAMETRI:\n- olderThanDays=7: Solo cashback creati da più di 7 giorni\n- status=pending: Solo quelli non ancora disponibili\n\nPERIODO DI GRAZIA (7 GIORNI):\nIl cashback rimane 'pending' per 7 giorni dopo la transazione per permettere:\n- Contestazioni da parte dell'acquirente\n- Verifiche antifrode\n- Resi e rimborsi\n\nDopo 7 giorni senza problemi, il cashback viene rilasciato.\n\nRISPOSTA ATTESA:\n{\n  \"items\": [\n    {\n      \"id\": \"cb_xxx\",\n      \"userId\": \"fb_123\",\n      \"amount\": 5.00,\n      \"transactionId\": \"tx_xxx\",\n      \"createdAt\": \"2024-01-01T10:00:00Z\"\n    }\n  ],\n  \"count\": 15\n}",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 4,
+                            "module": "builtin:BasicFeeder",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{3.data.items}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": -450,
+                                    "notes": {
+                                        "text": "ITERATOR - PROCESSA OGNI CASHBACK\n\nConverte l'array di cashback pendenti in esecuzioni singole.\n\nOgni iterazione avrà accesso a:\n- {{4.id}}: ID del cashback\n- {{4.userId}}: Utente beneficiario\n- {{4.amount}}: Importo da rilasciare\n- {{4.transactionId}}: Transazione originale\n- {{4.type}}: Tipo (seller/buyer/leader/referrer)\n- {{4.createdAt}}: Data creazione\n\nSe ci sono 50 cashback pendenti, i moduli successivi verranno eseguiti 50 volte.\n\nLIMITI:\nMake ha un limite di operazioni per scenario.\nSe hai molti cashback, considera di aumentare il limite o eseguire in batch.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 5,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/{{4.id}}/release",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"releasedAt\": \"{{now}}\", \"releasedBy\": \"automatic_cleanup\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": -450,
+                                    "notes": {
+                                        "text": "RILASCIA CASHBACK\n\nAggiorna lo stato del cashback da 'pending' a 'available'.\n\nENDPOINT: POST /cashback/{id}/release\n\nBODY:\n- releasedAt: Timestamp del rilascio\n- releasedBy: 'automatic_cleanup' (per audit)\n\nCOSA CAMBIA:\n- status: pending → available\n- Il saldo utente viene aggiornato\n- L'utente può ora prelevare questo importo\n\nRISPOSTA:\n{\n  \"success\": true,\n  \"cashback\": {\n    \"id\": \"cb_xxx\",\n    \"status\": \"available\",\n    \"amount\": 5.00\n  },\n  \"newBalance\": 45.50\n}\n\nNOTA: La Lambda gestisce l'atomicità dell'operazione e previene double-release.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 6,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "access_token",
+                                        "value": "YOUR_PAGE_ACCESS_TOKEN"
+                                    }
+                                ],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{4.userId}}\"},\"message\":{\"text\":\"💰 Cashback Disponibile!\\n\\nIl tuo cashback di €{{4.amount}} è ora disponibile per il prelievo!\\n\\nMotivo: {{4.type}}\\nTransazione: {{4.transactionId}}\\n\\nScrivi 'SALDO' per vedere il tuo bilancio totale.\"}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": -450,
+                                    "notes": {
+                                        "text": "NOTIFICA UTENTE - CASHBACK DISPONIBILE\n\nInvia un messaggio Messenger per informare l'utente che il suo cashback è ora disponibile.\n\n⚠️ CONFIGURAZIONE RICHIESTA:\nSostituisci 'YOUR_PAGE_ACCESS_TOKEN' con il token della tua pagina Facebook.\n\nMESSAGGIO INVIATO:\n- Importo del cashback\n- Tipo (vendita, acquisto, leadership, referral)\n- ID transazione per riferimento\n- Call-to-action per vedere saldo\n\nPOLICY MESSENGER:\nQuesto messaggio è consentito perché:\n- È una notifica transazionale\n- L'utente ha precedentemente interagito (transazione)\n- Rientra nelle 24h window o message tags\n\nMESSAGE TAG: ACCOUNT_UPDATE\nSe oltre 24h dall'ultima interazione, aggiungi:\n\"messaging_type\": \"MESSAGE_TAG\",\n\"tag\": \"ACCOUNT_UPDATE\"",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 7,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings",
+                                "method": "GET",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "status",
+                                        "value": "active"
+                                    },
+                                    {
+                                        "name": "olderThanDays",
+                                        "value": "30"
+                                    },
+                                    {
+                                        "name": "noActivityDays",
+                                        "value": "14"
+                                    }
+                                ],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": -150,
+                                    "notes": {
+                                        "text": "RECUPERA LISTING DA SCADERE\n\nOttiene tutti i listing attivi che devono essere scaduti.\n\nENDPOINT: GET /listings\n\nCRITERI DI SCADENZA:\n- status=active: Solo listing ancora attivi\n- olderThanDays=30: Creati da più di 30 giorni\n- noActivityDays=14: Nessuna visualizzazione/interesse negli ultimi 14 giorni\n\nLOGICA DI SCADENZA:\nUn listing viene scaduto se:\n1. Ha più di 30 giorni E\n2. Non ha ricevuto interazioni da 14+ giorni\n\nQuesto evita di scadere listing ancora popolari.\n\nRISPOSTA ATTESA:\n{\n  \"items\": [\n    {\n      \"id\": \"lst_xxx\",\n      \"userId\": \"fb_123\",\n      \"title\": \"iPhone 12\",\n      \"createdAt\": \"...\",\n      \"lastActivityAt\": \"...\"\n    }\n  ],\n  \"count\": 8\n}",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 8,
+                            "module": "builtin:BasicFeeder",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{7.data.items}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": -150,
+                                    "notes": {
+                                        "text": "ITERATOR - PROCESSA OGNI LISTING\n\nConverte l'array di listing in scadenza in esecuzioni singole.\n\nPer ogni listing avremo:\n- {{8.id}}: ID del listing\n- {{8.userId}}: ID venditore\n- {{8.title}}: Titolo annuncio\n- {{8.price}}: Prezzo\n- {{8.createdAt}}: Data creazione\n- {{8.lastActivityAt}}: Ultima attività\n- {{8.facebookPostId}}: ID post originale\n\nI moduli successivi verranno eseguiti per ogni listing.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 9,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings/{{8.id}}",
+                                "method": "PATCH",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"status\": \"expired\", \"expiredAt\": \"{{now}}\", \"expiredReason\": \"inactivity_30_days\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": -150,
+                                    "notes": {
+                                        "text": "MARCA LISTING COME SCADUTO\n\nAggiorna lo status del listing a 'expired'.\n\nENDPOINT: PATCH /listings/{id}\n\nBODY:\n- status: 'expired'\n- expiredAt: Timestamp scadenza\n- expiredReason: 'inactivity_30_days'\n\nEFFETTI:\n- Il listing non appare più nelle ricerche\n- Non viene più matchato con richieste\n- L'utente può rinnovarlo se vuole\n\nSTATI POSSIBILI:\n- active: Visibile e matchabile\n- expired: Scaduto, non visibile\n- sold: Venduto\n- deleted: Rimosso dall'utente\n\nIL LISTING NON VIENE ELIMINATO:\nRimane nel database per:\n- Storico vendite\n- Analytics\n- Possibile rinnovo",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 10,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "access_token",
+                                        "value": "YOUR_PAGE_ACCESS_TOKEN"
+                                    }
+                                ],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{8.userId}}\"},\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"button\",\"text\":\"⏰ Annuncio Scaduto\\n\\nIl tuo annuncio '{{8.title}}' è scaduto per inattività.\\n\\nNon preoccuparti! Puoi rinnovarlo in un click.\",\"buttons\":[{\"type\":\"postback\",\"title\":\"🔄 Rinnova (30 giorni)\",\"payload\":\"RENEW_LISTING_{{8.id}}\"},{\"type\":\"postback\",\"title\":\"✅ È stato venduto\",\"payload\":\"MARK_SOLD_{{8.id}}\"},{\"type\":\"postback\",\"title\":\"🗑️ Elimina\",\"payload\":\"DELETE_LISTING_{{8.id}}\"}]}}}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": -150,
+                                    "notes": {
+                                        "text": "NOTIFICA VENDITORE - LISTING SCADUTO\n\nInforma il venditore che il suo annuncio è scaduto e offre opzioni.\n\n⚠️ CONFIGURAZIONE RICHIESTA:\nSostituisci 'YOUR_PAGE_ACCESS_TOKEN'\n\nTEMPLATE BUTTON CON 3 OPZIONI:\n\n1. RINNOVA (30 giorni)\n   Payload: RENEW_LISTING_{id}\n   Riattiva il listing per altri 30 giorni\n\n2. È STATO VENDUTO\n   Payload: MARK_SOLD_{id}\n   Marca come venduto (fuori piattaforma)\n\n3. ELIMINA\n   Payload: DELETE_LISTING_{id}\n   Rimuove definitivamente\n\nQUESTI POSTBACK:\nVengono gestiti dallo Scenario 2 (Messenger Handler).\nAssicurati che le route per RENEW_, MARK_SOLD_, DELETE_ siano implementate.\n\nBENEFICI UX:\n- Utente informato proattivamente\n- Può agire con un tap\n- Riduce listing 'zombie'",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 11,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests",
+                                "method": "GET",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "status",
+                                        "value": "active"
+                                    },
+                                    {
+                                        "name": "olderThanDays",
+                                        "value": "14"
+                                    }
+                                ],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": 150,
+                                    "notes": {
+                                        "text": "RECUPERA RICHIESTE DA SCADERE\n\nOttiene tutte le richieste attive che devono essere scadute.\n\nENDPOINT: GET /requests\n\nCRITERI:\n- status=active: Solo richieste ancora attive\n- olderThanDays=14: Create da più di 14 giorni\n\nPERCHÉ 14 GIORNI (vs 30 per listing):\nLe richieste hanno urgenza maggiore.\nSe dopo 14 giorni non c'è match, probabilmente:\n- L'utente ha trovato altrove\n- La richiesta era troppo specifica\n- L'utente non è più interessato\n\nRISPOSTA ATTESA:\n{\n  \"items\": [\n    {\n      \"id\": \"req_xxx\",\n      \"userId\": \"fb_123\",\n      \"description\": \"Cerco iPhone 12\",\n      \"maxPrice\": 400,\n      \"matchCount\": 0,\n      \"createdAt\": \"...\"\n    }\n  ],\n  \"count\": 5\n}",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "builtin:BasicFeeder",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{11.data.items}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 150,
+                                    "notes": {
+                                        "text": "ITERATOR - PROCESSA OGNI RICHIESTA\n\nConverte l'array di richieste in esecuzioni singole.\n\nPer ogni richiesta avremo:\n- {{12.id}}: ID della richiesta\n- {{12.userId}}: ID dell'utente\n- {{12.description}}: Cosa cerca\n- {{12.maxPrice}}: Budget massimo\n- {{12.category}}: Categoria\n- {{12.matchCount}}: Quanti match ha ricevuto\n- {{12.createdAt}}: Quando è stata creata",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 13,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests/{{12.id}}",
+                                "method": "PATCH",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"status\": \"expired\", \"expiredAt\": \"{{now}}\", \"expiredReason\": \"no_match_14_days\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": 150,
+                                    "notes": {
+                                        "text": "MARCA RICHIESTA COME SCADUTA\n\nAggiorna lo status della richiesta a 'expired'.\n\nENDPOINT: PATCH /requests/{id}\n\nBODY:\n- status: 'expired'\n- expiredAt: Timestamp\n- expiredReason: 'no_match_14_days'\n\nEFFETTI:\n- La richiesta non viene più processata dal matching\n- L'utente può ricrearla se vuole\n- Rimane nel database per analytics\n\nSTATI RICHIESTA:\n- active: In attesa di match\n- fulfilled: Trovato e acquistato\n- expired: Scaduta\n- cancelled: Annullata dall'utente",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 14,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [
+                                    {
+                                        "name": "access_token",
+                                        "value": "YOUR_PAGE_ACCESS_TOKEN"
+                                    }
+                                ],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{12.userId}}\"},\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"button\",\"text\":\"⏰ Ricerca Scaduta\\n\\nLa tua ricerca '{{12.description}}' è scaduta dopo 14 giorni.\\n\\nNon abbiamo trovato match perfetti. Vuoi riprovare?\",\"buttons\":[{\"type\":\"postback\",\"title\":\"🔄 Ricrea Ricerca\",\"payload\":\"RECREATE_REQUEST_{{12.id}}\"},{\"type\":\"postback\",\"title\":\"✅ Ho già trovato\",\"payload\":\"REQUEST_FULFILLED_{{12.id}}\"},{\"type\":\"postback\",\"title\":\"❌ Non più interessato\",\"payload\":\"REQUEST_CANCELLED_{{12.id}}\"}]}}}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 150,
+                                    "notes": {
+                                        "text": "NOTIFICA UTENTE - RICHIESTA SCADUTA\n\nInforma l'utente che la sua ricerca è scaduta.\n\n⚠️ CONFIGURAZIONE RICHIESTA:\nSostituisci 'YOUR_PAGE_ACCESS_TOKEN'\n\nTEMPLATE BUTTON CON 3 OPZIONI:\n\n1. RICREA RICERCA\n   Payload: RECREATE_REQUEST_{id}\n   Crea una nuova richiesta identica\n\n2. HO GIÀ TROVATO\n   Payload: REQUEST_FULFILLED_{id}\n   L'utente ha trovato altrove\n   (utile per analytics)\n\n3. NON PIÙ INTERESSATO\n   Payload: REQUEST_CANCELLED_{id}\n   Conferma la chiusura\n\nINSIGHT:\n- Se molti scelgono 'Ho già trovato': il matching è lento\n- Se molti scelgono 'Ricrea': c'è domanda, mancano venditori\n- Se molti scelgono 'Non interessato': richieste non genuine",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 15,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/admin/cleanup",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"actions\": [\"deleteOldNotifications\", \"archiveCompletedTransactions\", \"cleanupExpiredSessions\", \"aggregateDailyStats\"], \"retentionDays\": {\"notifications\": 30, \"transactions\": 365, \"sessions\": 7}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": 450,
+                                    "notes": {
+                                        "text": "CLEANUP DATI OBSOLETI\n\nChiama l'endpoint admin per pulizia batch del database.\n\nENDPOINT: POST /admin/cleanup\n\nAZIONI ESEGUITE:\n\n1. deleteOldNotifications (30 giorni)\n   Elimina notifiche lette più vecchie di 30 giorni\n   Mantiene quelle non lette\n\n2. archiveCompletedTransactions (365 giorni)\n   Archivia transazioni completate dopo 1 anno\n   Sposta in tabella archivio (costi storage ridotti)\n\n3. cleanupExpiredSessions (7 giorni)\n   Rimuove sessioni di conversazione scadute\n   Libera memoria per contesti Messenger\n\n4. aggregateDailyStats\n   Aggrega metriche giornaliere in tabella stats\n   Prepara dati per dashboard analytics\n\nRETENTION POLICY:\n- Notifiche: 30 giorni\n- Transazioni: 1 anno (poi archivio)\n- Sessioni: 7 giorni\n\nQuesta Lambda usa batch operations per efficienza e riduce i costi DynamoDB.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 16,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/admin/stats/daily",
+                                "method": "POST",
+                                "headers": [
+                                    {
+                                        "name": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"date\": \"{{formatDate(addDays(now; -1); \"YYYY-MM-DD\")}}\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 450,
+                                    "notes": {
+                                        "text": "GENERA STATISTICHE GIORNALIERE\n\nCalcola e salva le statistiche del giorno precedente.\n\nENDPOINT: POST /admin/stats/daily\n\nBODY:\n- date: Data del giorno da calcolare (ieri)\n  Formato: YYYY-MM-DD\n  Es: 2024-01-15\n\nSTATISTICHE CALCOLATE:\n- newListings: Nuovi annunci creati\n- newRequests: Nuove richieste\n- matchesMade: Match generati\n- transactionsCompleted: Vendite concluse\n- totalVolume: Volume transato (€)\n- totalCashbackDistributed: Cashback erogato\n- newUsers: Nuovi utenti registrati\n- activeUsers: Utenti attivi (DAU)\n- messagesProcessed: Messaggi Messenger gestiti\n\nQUESTE STATISTICHE SERVONO PER:\n- Dashboard admin\n- Report settimanali/mensili\n- Analisi trend\n- KPI monitoring",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 17,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "parameters": {
+                                "else": 0
+                            },
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": 450,
+                                    "notes": {
+                                        "text": "ROUTER - ALERT ADMIN\n\nControlla i risultati del cleanup e delle stats per decidere se notificare l'admin.\n\nROUTE 1: Problemi Rilevati\n  Se cleanup ha trovato errori\n  O se stats mostrano anomalie\n  → Notifica admin\n\nROUTE 2: Tutto OK (default)\n  Nessuna azione richiesta\n  Lo scenario termina silenziosamente\n\nQUANDO NOTIFICARE:\n- Errori durante cleanup\n- Statistiche anomale (drop >50%)\n- Spazio database critico\n- Transazioni sospette",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 18,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages",
+                                                "method": "POST",
+                                                "headers": [
+                                                    {
+                                                        "name": "Content-Type",
+                                                        "value": "application/json"
+                                                    }
+                                                ],
+                                                "qs": [
+                                                    {
+                                                        "name": "access_token",
+                                                        "value": "YOUR_PAGE_ACCESS_TOKEN"
+                                                    }
+                                                ],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"YOUR_ADMIN_FACEBOOK_ID\"},\"message\":{\"text\":\"⚠️ ALERT GIORNALIERO\\n\\nCleanup completato con warning:\\n- Errori: {{15.data.errors}}\\n- Record puliti: {{15.data.cleaned}}\\n\\nStats ieri:\\n- Nuovi listing: {{16.data.newListings}}\\n- Transazioni: {{16.data.transactions}}\\n- Volume: €{{16.data.volume}}\\n\\nControlla la dashboard per dettagli.\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": 300,
+                                                    "notes": {
+                                                        "text": "NOTIFICA ADMIN - REPORT GIORNALIERO\n\nInvia un messaggio all'amministratore con il riepilogo giornaliero.\n\n⚠️ CONFIGURAZIONI RICHIESTE:\n1. YOUR_PAGE_ACCESS_TOKEN\n2. YOUR_ADMIN_FACEBOOK_ID (il tuo ID Facebook personale)\n\nPer trovare il tuo Facebook ID:\n- Vai su findmyfbid.com\n- O usa Graph API Explorer\n\nCONTENUTO REPORT:\n- Errori durante cleanup (se presenti)\n- Record eliminati/archiviati\n- Statistiche chiave del giorno\n- Volume transazioni\n\nQUANDO RICEVI QUESTO:\n- Ogni mattina alle ~3:05 AM\n- Solo se ci sono warning o anomalie\n- Controlla la dashboard per azioni\n\nPER DISABILITARE:\n- Rimuovi questo modulo\n- O modifica il filtro sulla route",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "Has Warnings or Errors",
+                                                "conditions": [
+                                                    [
+                                                        {
+                                                            "a": "{{15.data.errors}}",
+                                                            "b": "0",
+                                                            "o": "number:notequal"
+                                                        }
+                                                    ],
+                                                    [
+                                                        {
+                                                            "a": "{{15.data.warnings}}",
+                                                            "b": "0",
+                                                            "o": "number:notequal"
+                                                        }
+                                                    ]
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "notes": "SCENARIO: Quofind - Daily Cleanup & Maintenance\n\nDESCRIZIONE:\nQuesto scenario esegue tutte le operazioni di manutenzione giornaliera del marketplace.\nViene eseguito automaticamente ogni notte alle 3:00 AM.\n\nOPERAZIONI ESEGUITE:\n\n1. RILASCIO CASHBACK (Route 1)\n   - Trova cashback 'pending' da >7 giorni\n   - Li converte in 'available'\n   - Notifica gli utenti\n   - Periodo grazia: 7 giorni per contestazioni\n\n2. SCADENZA LISTING (Route 2)\n   - Trova listing attivi da >30 giorni senza attività recente\n   - Li marca come 'expired'\n   - Notifica venditori con opzioni (rinnova/venduto/elimina)\n\n3. SCADENZA RICHIESTE (Route 3)\n   - Trova richieste aperte da >14 giorni\n   - Le marca come 'expired'\n   - Notifica compratori con opzioni (ricrea/trovato/annulla)\n\n4. CLEANUP DATABASE (Route 4)\n   - Elimina notifiche vecchie\n   - Archivia transazioni completate\n   - Pulisce sessioni scadute\n   - Genera statistiche giornaliere\n   - Alert admin se problemi\n\nSCHEDULING:\n- Orario: 3:00 AM (locale)\n- Frequenza: Giornaliero\n- Timezone: Europe/Rome (configurare in Make)\n\nCONFIGURAZIONI RICHIESTE:\n- YOUR_PAGE_ACCESS_TOKEN: Token pagina Facebook\n- YOUR_ADMIN_FACEBOOK_ID: ID Facebook dell'admin\n\nCOSTI STIMATI:\n- Make: ~50-200 operazioni/esecuzione (dipende dal volume)\n- AWS: Minimal (Lambda + DynamoDB operations)\n\nMONITORAGGIO:\n- Controlla Make History per errori\n- Ricevi alert su Messenger se problemi\n- Dashboard AWS CloudWatch per metriche Lambda"
+    }
+}

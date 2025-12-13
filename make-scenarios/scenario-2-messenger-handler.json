@@ -1,0 +1,792 @@
+{
+    "name": "Quofind - 2. Messenger Handler",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {"hook": null, "maxResults": 1},
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nWEBHOOK: FACEBOOK MESSENGER EVENTS\n═══════════════════════════════════════════\n\nRiceve messaggi e interazioni da Messenger.\n\n📥 TIPI DI EVENTI:\n• message → Messaggio testuale\n• postback → Click su pulsante/quick reply\n• referral → Click su link m.me\n\n⚙️ CONFIGURAZIONE FACEBOOK:\n1. Webhooks → Page → Subscribe\n2. Fields: messages, messaging_postbacks\n3. Callback URL: questo webhook\n4. Verify Token: quofind_make_2024\n\n📦 STRUTTURA DATI:\n{\n  \"object\": \"page\",\n  \"entry\": [{\n    \"messaging\": [{\n      \"sender\": {\"id\": \"USER_ID\"},\n      \"recipient\": {\"id\": \"PAGE_ID\"},\n      \"timestamp\": 1234567890,\n      \"message\": {\n        \"mid\": \"msg_id\",\n        \"text\": \"Testo messaggio\"\n      },\n      \"postback\": {\n        \"payload\": \"PAYLOAD_STRING\",\n        \"title\": \"Testo pulsante\"\n      }\n    }]\n  }]\n}\n\n🔗 VARIABILI:\n• {{1.entry[].messaging[].sender.id}} → User ID\n• {{1.entry[].messaging[].message.text}} → Testo\n• {{1.entry[].messaging[].postback.payload}} → Payload",
+                        "position": "bottom"
+                    }
+                },
+                "expect": [
+                    {"name": "object", "type": "text"},
+                    {
+                        "name": "entry",
+                        "type": "array",
+                        "spec": [{
+                            "name": "messaging",
+                            "type": "array",
+                            "spec": [
+                                {"name": "sender", "type": "collection", "spec": [{"name": "id", "type": "text"}]},
+                                {"name": "recipient", "type": "collection", "spec": [{"name": "id", "type": "text"}]},
+                                {"name": "timestamp", "type": "number"},
+                                {"name": "message", "type": "collection", "spec": [{"name": "mid", "type": "text"}, {"name": "text", "type": "text"}]},
+                                {"name": "postback", "type": "collection", "spec": [{"name": "payload", "type": "text"}, {"name": "title", "type": "text"}]}
+                            ]
+                        }]
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 1},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: TIPO MESSAGGIO\n═══════════════════════════════════════════\n\n🔀 ROUTES:\n\n→ ROUTE 1: POSTBACK (pulsante cliccato)\n  Filtro: postback.payload esiste\n  → Sub-router per tipo payload\n\n→ ROUTE 2: MESSAGGIO TESTUALE\n  Filtro: message.text esiste\n  → Gemini per intent detection\n\n💡 ELSE: Route 2 (default per messaggi)",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 3,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "parameters": {"else": 0},
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": -400,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nROUTER: PAYLOAD POSTBACK\n═══════════════════════════════════════════\n\nSmista in base al payload del pulsante cliccato.\n\n🔀 PAYLOADS GESTITI:\n\n→ CONFIRM_LISTING_* → Conferma listing\n→ CONFIRM_REQUEST_* → Conferma request\n→ SOLD_* → Registra vendita\n→ CONTACT_* → Contatta venditore\n→ MY_LISTINGS → Mostra annunci utente\n→ MY_REQUESTS → Mostra ricerche utente\n→ BALANCE → Saldo cashback\n→ TRANSACTIONS → Storico transazioni\n→ HELP → Menu aiuto\n→ SEARCH → Avvia ricerca",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Is Postback",
+                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "", "o": "text:notequal"}]]
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 4,
+                                            "module": "util:SetVariables",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "variables": [
+                                                    {"name": "postId", "value": "{{replace(1.entry[].messaging[].postback.payload; \"CONFIRM_LISTING_\"; \"\")}}"}
+                                                ]
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 900,
+                                                    "y": -600,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nESTRAI POST ID\n═══════════════════════════════════════════\n\nEstrae l'ID del post dal payload.\n\nInput: CONFIRM_LISTING_123_456\nOutput: {{4.postId}} = 123_456",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "CONFIRM_LISTING_*",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "CONFIRM_LISTING_", "o": "text:startswith"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 5,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings/confirm-from-post",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"facebookPostId\": \"{{4.postId}}\", \"userId\": \"{{1.entry[].messaging[].sender.id}}\", \"confirmedType\": \"listing\"}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1200,
+                                                    "y": -600,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nCONFERMA LISTING DA POST\n═══════════════════════════════════════════\n\nL'utente ha confermato che il post è un annuncio di vendita.\n\nCrea il listing con i dati già analizzati (salvati temporaneamente).",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 6,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"✅ Perfetto! Ho creato il tuo annuncio.\\n\\nID: {{5.data.id}}\\n\\nSarà visibile per 30 giorni.\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {"x": 1500, "y": -600, "notes": {"text": "CONFERMA: Listing creato", "position": "bottom"}}
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 7,
+                                            "module": "util:SetVariables",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"variables": [{"name": "postId", "value": "{{replace(1.entry[].messaging[].postback.payload; \"SOLD_\"; \"\")}}"}]},
+                                            "metadata": {"designer": {"x": 900, "y": -400, "notes": {"text": "Estrae post ID da SOLD_*", "position": "bottom"}}},
+                                            "filter": {
+                                                "name": "SOLD_*",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "SOLD_", "o": "text:startswith"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 8,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"💰 Ottimo, hai venduto!\\n\\nA quanto hai venduto l'oggetto? Rispondi con il prezzo (es: \\\"350€\\\") per calcolare il cashback.\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1200,
+                                                    "y": -400,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nCHIEDI PREZZO VENDITA\n═══════════════════════════════════════════\n\nL'utente ha indicato di aver venduto.\nOra chiediamo il prezzo effettivo per calcolare il cashback.\n\nLa risposta verrà processata come messaggio testuale e Gemini estrarrà il prezzo.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 9,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/users/{{1.entry[].messaging[].sender.id}}/context",
+                                                "method": "PUT",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"awaitingInput\": \"sale_price\", \"contextData\": {\"postId\": \"{{7.postId}}\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": -400,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nSALVA CONTESTO CONVERSAZIONE\n═══════════════════════════════════════════\n\nSalva che stiamo aspettando il prezzo di vendita.\n\nQuando l'utente risponde con un numero, sapremo che è il prezzo.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 10,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/balance?userId={{1.entry[].messaging[].sender.id}}",
+                                                "method": "GET",
+                                                "headers": [],
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 900,
+                                                    "y": -200,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nRECUPERA SALDO CASHBACK\n═══════════════════════════════════════════\n\nChiama API per ottenere saldo utente.\n\n📥 RISPOSTA:\n{\n  \"available\": 25.50,\n  \"pending\": 12.00,\n  \"total\": 37.50,\n  \"currency\": \"EUR\"\n}",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "BALANCE",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "BALANCE", "o": "text:equal"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 11,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"💰 Il tuo saldo Quofind Cashback:\\n\\n✅ Disponibile: {{10.data.available}}€\\n⏳ In attesa: {{10.data.pending}}€\\n━━━━━━━━━━━━━━━\\n📊 Totale: {{10.data.total}}€\\n\\nIl cashback in attesa diventa disponibile 30 giorni dopo la vendita.\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"📜 Storico\",\"payload\":\"TRANSACTIONS\"},{\"content_type\":\"text\",\"title\":\"💸 Prelievo\",\"payload\":\"WITHDRAW\"},{\"content_type\":\"text\",\"title\":\"🏠 Menu\",\"payload\":\"HELP\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {"x": 1200, "y": -200, "notes": {"text": "MOSTRA SALDO con opzioni", "position": "bottom"}}
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 12,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/transactions?userId={{1.entry[].messaging[].sender.id}}&limit=10",
+                                                "method": "GET",
+                                                "headers": [],
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 900, "y": 0, "notes": {"text": "Recupera ultime 10 transazioni", "position": "bottom"}}},
+                                            "filter": {
+                                                "name": "TRANSACTIONS",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "TRANSACTIONS", "o": "text:equal"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 13,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"📜 Ultime transazioni:\\n\\n{{12.data.formatted}}\\n\\nTotale guadagnato: {{12.data.totalEarned}}€\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 1200, "y": 0, "notes": {"text": "Mostra storico formattato", "position": "bottom"}}}
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 14,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings?userId={{1.entry[].messaging[].sender.id}}&status=active",
+                                                "method": "GET",
+                                                "headers": [],
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 900, "y": 200, "notes": {"text": "Recupera annunci attivi utente", "position": "bottom"}}},
+                                            "filter": {
+                                                "name": "MY_LISTINGS",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "MY_LISTINGS", "o": "text:equal"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 15,
+                                            "module": "builtin:BasicRouter",
+                                            "version": 1,
+                                            "parameters": {"else": 1},
+                                            "mapper": null,
+                                            "metadata": {"designer": {"x": 1200, "y": 200, "notes": {"text": "Ha annunci?", "position": "bottom"}}},
+                                            "routes": [
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 16,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"generic\",\"elements\":{{14.data.carouselElements}}}}}}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {"designer": {"x": 1500, "y": 150, "notes": {"text": "Carousel annunci", "position": "bottom"}}},
+                                                            "filter": {"name": "Has Listings", "conditions": [[{"a": "{{14.data.count}}", "b": "0", "o": "number:gt"}]]}
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 17,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"📦 Non hai annunci attivi al momento.\\n\\nPer vendere qualcosa, pubblica un post nel gruppo Facebook!\"}}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {"designer": {"x": 1500, "y": 250, "notes": {"text": "Nessun annuncio", "position": "bottom"}}}
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 18,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"👋 Ciao! Sono l'assistente Quofind.\\n\\nEcco cosa posso fare:\\n\\n🔍 CERCARE - Scrivi cosa cerchi\\n📦 VENDERE - Pubblica nel gruppo FB\\n💰 SALDO - Vedi il tuo cashback\\n📜 STORICO - Le tue transazioni\\n📋 ANNUNCI - I tuoi annunci attivi\\n\\n💡 Come funziona il cashback?\\nOgni vendita ti fa guadagnare il 2% del prezzo!\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"🔍 Cerca\",\"payload\":\"SEARCH\"},{\"content_type\":\"text\",\"title\":\"📦 I miei annunci\",\"payload\":\"MY_LISTINGS\"},{\"content_type\":\"text\",\"title\":\"💰 Saldo\",\"payload\":\"BALANCE\"},{\"content_type\":\"text\",\"title\":\"❓ FAQ\",\"payload\":\"FAQ\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 900,
+                                                    "y": 400,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nMENU HELP PRINCIPALE\n═══════════════════════════════════════════\n\nMostra tutte le opzioni disponibili con quick replies.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "HELP",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "HELP", "o": "text:equal"}]]
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 19,
+                                            "module": "util:SetVariables",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"variables": [{"name": "listingId", "value": "{{replace(1.entry[].messaging[].postback.payload; \"CONTACT_\"; \"\")}}"}]},
+                                            "metadata": {"designer": {"x": 900, "y": 600, "notes": {"text": "Estrai listing ID", "position": "bottom"}}},
+                                            "filter": {
+                                                "name": "CONTACT_*",
+                                                "conditions": [[{"a": "{{1.entry[].messaging[].postback.payload}}", "b": "CONTACT_", "o": "text:startswith"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 20,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings/{{19.listingId}}",
+                                                "method": "GET",
+                                                "headers": [],
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 1200, "y": 600, "notes": {"text": "Recupera dettagli listing e seller", "position": "bottom"}}}
+                                        },
+                                        {
+                                            "id": 21,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{20.data.userId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"📩 Qualcuno è interessato al tuo annuncio!\\n\\n📦 {{20.data.title}}\\n💰 {{20.data.price}}€\\n\\nVuoi essere messo in contatto?\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"✅ Sì, contattami\",\"payload\":\"ACCEPT_CONTACT_{{1.entry[].messaging[].sender.id}}_{{19.listingId}}\"},{\"content_type\":\"text\",\"title\":\"❌ No grazie\",\"payload\":\"DECLINE_CONTACT\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": 600,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nNOTIFICA VENDITORE\n═══════════════════════════════════════════\n\nInforma il venditore che qualcuno è interessato.\n\n⚠️ TAG: CONFIRMED_EVENT_UPDATE\nPermette di inviare messaggi anche dopo 24h.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 22,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"📤 Ho contattato il venditore!\\n\\nRiceverai un messaggio quando risponde.\\n\\n📦 {{20.data.title}}\\n💰 {{20.data.price}}€\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 1800, "y": 600, "notes": {"text": "Conferma al buyer", "position": "bottom"}}}
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 23,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/users/{{1.entry[].messaging[].sender.id}}/context",
+                                "method": "GET",
+                                "headers": [],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": 200,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nRECUPERA CONTESTO UTENTE\n═══════════════════════════════════════════\n\nControlla se stiamo aspettando un input specifico.\n\nEs: awaitingInput = 'sale_price' → L'utente sta rispondendo con il prezzo di vendita",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Is Text Message",
+                                "conditions": [[{"a": "{{1.entry[].messaging[].message.text}}", "b": "", "o": "text:notequal"}]]
+                            }
+                        },
+                        {
+                            "id": 24,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "parameters": {"else": 1},
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 200,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nROUTER: CONTESTO CONVERSAZIONE\n═══════════════════════════════════════════\n\n→ ROUTE A: Aspetta prezzo vendita\n→ ROUTE B: Nessun contesto → Gemini intent",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 25,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"contents\":[{\"parts\":[{\"text\":\"Estrai il prezzo numerico da questo messaggio. Rispondi SOLO con un numero (es: 350), senza simboli o testo.\\n\\nMessaggio: {{1.entry[].messaging[].message.text}}\"}]}],\"generationConfig\":{\"temperature\":0,\"maxOutputTokens\":20}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 1200, "y": 100, "notes": {"text": "Estrai prezzo da messaggio", "position": "bottom"}}},
+                                            "filter": {
+                                                "name": "Awaiting Sale Price",
+                                                "conditions": [[{"a": "{{23.data.awaitingInput}}", "b": "sale_price", "o": "text:equal"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 26,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/payments",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"sellerId\": \"{{1.entry[].messaging[].sender.id}}\", \"facebookPostId\": \"{{23.data.contextData.postId}}\", \"amount\": {{25.data.candidates[].content.parts[].text}}, \"currency\": \"EUR\", \"source\": \"messenger_confirmation\"}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": 100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nREGISTRA VENDITA\n═══════════════════════════════════════════\n\nCrea record pagamento/vendita.\nQuesto triggererà lo Scenario 4 per il cashback.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 27,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/users/{{1.entry[].messaging[].sender.id}}/context",
+                                                "method": "DELETE",
+                                                "headers": [],
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 1800, "y": 100, "notes": {"text": "Pulisci contesto", "position": "bottom"}}}
+                                        },
+                                        {
+                                            "id": 28,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🎉 Vendita registrata!\\n\\n💰 Prezzo: {{25.data.candidates[].content.parts[].text}}€\\n💵 Cashback: {{26.data.cashbackAmount}}€\\n\\nIl cashback sarà disponibile tra 30 giorni.\\n\\nGrazie per aver usato Quofind!\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {"designer": {"x": 2100, "y": 100, "notes": {"text": "Conferma vendita + cashback", "position": "bottom"}}}
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 29,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"contents\":[{\"parts\":[{\"text\":\"Analizza questo messaggio di un utente su un marketplace e determina l'intent.\\n\\nMessaggio: {{1.entry[].messaging[].message.text}}\\n\\nRispondi SOLO con JSON valido:\\n{\\n  \\\"intent\\\": \\\"search\\\" | \\\"balance\\\" | \\\"help\\\" | \\\"greeting\\\" | \\\"thanks\\\" | \\\"complaint\\\" | \\\"other\\\",\\n  \\\"keywords\\\": [\\\"keyword1\\\", \\\"keyword2\\\"],\\n  \\\"category\\\": \\\"categoria\\\" | null,\\n  \\\"maxPrice\\\": numero | null,\\n  \\\"location\\\": \\\"località\\\" | null,\\n  \\\"sentiment\\\": \\\"positive\\\" | \\\"neutral\\\" | \\\"negative\\\"\\n}\"}]}],\"generationConfig\":{\"temperature\":0.2,\"maxOutputTokens\":300}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1200,
+                                                    "y": 300,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nGEMINI: INTENT DETECTION\n═══════════════════════════════════════════\n\nAnalizza il messaggio per capire cosa vuole l'utente.\n\n🎯 INTENTS:\n• search → Cerca prodotti\n• balance → Chiede saldo\n• help → Vuole aiuto\n• greeting → Saluto\n• thanks → Ringraziamento\n• complaint → Lamentela\n• other → Altro",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 30,
+                                            "module": "json:ParseJSON",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"json": "{{29.data.candidates[].content.parts[].text}}"},
+                                            "metadata": {"designer": {"x": 1500, "y": 300, "notes": {"text": "Parse intent JSON", "position": "bottom"}}}
+                                        },
+                                        {
+                                            "id": 31,
+                                            "module": "builtin:BasicRouter",
+                                            "version": 1,
+                                            "parameters": {"else": 0},
+                                            "mapper": null,
+                                            "metadata": {"designer": {"x": 1800, "y": 300, "notes": {"text": "Router per intent", "position": "bottom"}}},
+                                            "routes": [
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 32,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings?q={{join(30.keywords; \",\")}}&category={{30.category}}&maxPrice={{30.maxPrice}}&location={{30.location}}&limit=10",
+                                                                "method": "GET",
+                                                                "headers": [],
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {"designer": {"x": 2100, "y": 200, "notes": {"text": "Cerca listing corrispondenti", "position": "bottom"}}},
+                                                            "filter": {"name": "search", "conditions": [[{"a": "{{30.intent}}", "b": "search", "o": "text:equal"}]]}
+                                                        },
+                                                        {
+                                                            "id": 33,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"userId\": \"{{1.entry[].messaging[].sender.id}}\", \"keywords\": {{30.keywords}}, \"category\": \"{{30.category}}\", \"maxPrice\": {{30.maxPrice}}, \"location\": \"{{30.location}}\", \"source\": \"messenger\"}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {"designer": {"x": 2400, "y": 200, "notes": {"text": "Salva request per matching futuro", "position": "bottom"}}}
+                                                        },
+                                                        {
+                                                            "id": 34,
+                                                            "module": "builtin:BasicRouter",
+                                                            "version": 1,
+                                                            "parameters": {"else": 1},
+                                                            "mapper": null,
+                                                            "metadata": {"designer": {"x": 2700, "y": 200, "notes": {"text": "Risultati trovati?", "position": "bottom"}}},
+                                                            "routes": [
+                                                                {
+                                                                    "flow": [
+                                                                        {
+                                                                            "id": 35,
+                                                                            "module": "http:ActionSendData",
+                                                                            "version": 3,
+                                                                            "parameters": {},
+                                                                            "mapper": {
+                                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                                "method": "POST",
+                                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                                "bodyType": "raw",
+                                                                                "contentType": "application/json",
+                                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🔍 Ho trovato {{32.data.count}} risultati per la tua ricerca!\"}}",
+                                                                                "parseResponse": true
+                                                                            },
+                                                                            "metadata": {"designer": {"x": 3000, "y": 150}},
+                                                                            "filter": {"name": "Has Results", "conditions": [[{"a": "{{32.data.count}}", "b": "0", "o": "number:gt"}]]}
+                                                                        },
+                                                                        {
+                                                                            "id": 36,
+                                                                            "module": "http:ActionSendData",
+                                                                            "version": 3,
+                                                                            "parameters": {},
+                                                                            "mapper": {
+                                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                                "method": "POST",
+                                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                                "bodyType": "raw",
+                                                                                "contentType": "application/json",
+                                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"generic\",\"elements\":{{32.data.carouselElements}}}}}}",
+                                                                                "parseResponse": true
+                                                                            },
+                                                                            "metadata": {"designer": {"x": 3300, "y": 150, "notes": {"text": "Carousel risultati", "position": "bottom"}}}
+                                                                        }
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "flow": [
+                                                                        {
+                                                                            "id": 37,
+                                                                            "module": "http:ActionSendData",
+                                                                            "version": 3,
+                                                                            "parameters": {},
+                                                                            "mapper": {
+                                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                                "method": "POST",
+                                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                                "bodyType": "raw",
+                                                                                "contentType": "application/json",
+                                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🔍 Non ho trovato risultati per \\\"{{join(30.keywords; \\\", \\\")}}\\\"\\n\\nHo salvato la tua ricerca e ti avviserò quando arrivano nuovi annunci!\\n\\n🔔 Request ID: {{33.data.id}}\"}}",
+                                                                                "parseResponse": true
+                                                                            },
+                                                                            "metadata": {"designer": {"x": 3000, "y": 250, "notes": {"text": "Nessun risultato, ricerca salvata", "position": "bottom"}}}
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 38,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].messaging[].sender.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"👋 Ciao! Come posso aiutarti oggi?\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"🔍 Cerca\",\"payload\":\"SEARCH\"},{\"content_type\":\"text\",\"title\":\"💰 Saldo\",\"payload\":\"BALANCE\"},{\"content_type\":\"text\",\"title\":\"❓ Aiuto\",\"payload\":\"HELP\"}]}}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {"designer": {"x": 2100, "y": 400}},
+                                                            "filter": {"name": "greeting", "conditions": [[{"a": "{{30.intent}}", "b": "greeting", "o": "text:equal"}]]}
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false
+        },
+        "designer": {"orphans": []},
+        "notes": "═══════════════════════════════════════════════════════════════\nSCENARIO 2: MESSENGER HANDLER\n═══════════════════════════════════════════════════════════════\n\n📋 DESCRIZIONE:\nGestisce tutte le interazioni via Facebook Messenger:\n- Messaggi testuali (ricerche, domande)\n- Click su pulsanti (postback)\n- Flussi conversazionali con contesto\n\n🔄 FLUSSO:\n\n1. WEBHOOK riceve messaggio/postback\n   ↓\n2. ROUTER: Postback o Testo?\n   ↓\n3a. POSTBACK → Router payload:\n    • CONFIRM_* → Crea listing/request\n    • SOLD_* → Registra vendita\n    • BALANCE → Mostra saldo\n    • TRANSACTIONS → Storico\n    • MY_LISTINGS → Lista annunci\n    • CONTACT_* → Contatta venditore\n    • HELP → Menu aiuto\n   ↓\n3b. TESTO → Controlla contesto:\n    • Ha contesto (es: aspetta prezzo) → Processa\n    • No contesto → Gemini intent detection\n      → search: Cerca + salva request\n      → greeting: Saluta\n      → altro: Help\n\n⚙️ CONFIGURAZIONI:\n• YOUR_GEMINI_API_KEY\n• YOUR_PAGE_ACCESS_TOKEN\n\n🔗 ENDPOINT AWS USATI:\n• GET /cashback/balance\n• GET /cashback/transactions\n• GET /listings\n• POST /requests\n• POST /payments\n• GET/PUT/DELETE /users/{id}/context\n\n💡 CONTESTO CONVERSAZIONALE:\nUsa /users/{id}/context per ricordare cosa stiamo aspettando dall'utente (es: prezzo vendita).\n\n📊 OPERAZIONI: ~5-15 per messaggio"
+    }
+}

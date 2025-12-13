@@ -117,7 +117,7 @@ sprints:
         status: "completed"
         assigned_to: "claude"
       - story_id: "STORY-012"
-        title: "n8n Handle New Facebook Post Workflow"
+        title: "Make Handle New Facebook Post Scenario"
         points: 8
         status: "completed"
         assigned_to: "claude"
@@ -213,7 +213,7 @@ sprints:
         status: "completed"
         assigned_to: "claude"
       - story_id: "STORY-013"
-        title: "n8n Periodic Matching Workflow"
+        title: "Make Periodic Matching Scenario"
         points: 8
         status: "completed"
         assigned_to: "claude"

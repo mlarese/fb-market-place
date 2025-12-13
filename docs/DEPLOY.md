@@ -306,15 +306,20 @@ curl -X POST $API_URL/listings \
 curl "$API_URL/listings?q=test&category=elettronica"
 ```
 
-### 3. Configura n8n (Opzionale)
+### 3. Configura Make (Raccomandato)
 
-Se usi n8n per i workflow:
+Per configurare gli scenari Make:
+
+1. Registrati su [make.com](https://www.make.com)
+2. Crea le connessioni necessarie (Facebook, OpenAI, HTTP)
+3. Crea gli scenari seguendo `docs/MAKE.md`
+4. Copia l'URL del webhook Make e configuralo su Facebook Developer
 
 ```bash
-# Aggiorna parametro
+# Opzionale: salva l'URL webhook Make in SSM
 aws ssm put-parameter \
-  --name "/quofind/dev/n8n-webhook-url" \
-  --value "https://your-n8n-instance.com/webhook/xxxx" \
+  --name "/quofind/dev/make-webhook-url" \
+  --value "https://hook.eu1.make.com/xxxx" \
   --type String
 ```
 

@@ -233,7 +233,7 @@ As the matching system, I want to retrieve all active requests, so that I can fi
 
 ---
 
-#### STORY-012: n8n Handle New Facebook Post Workflow
+#### STORY-012: Make Handle New Facebook Post Workflow
 **Epic:** EPIC-002 | **Priority:** Must Have | **Points:** 8
 
 **User Story:**
@@ -246,12 +246,12 @@ As the system, I want to process Facebook posts automatically, so that listings 
 - [ ] Create listing via Lambda
 - [ ] Send confirmation via Messenger
 
-**Technical Notes:** Main workflow in n8n, implements FR-001
+**Technical Notes:** Main workflow in Make, implements FR-001
 **Dependencies:** STORY-003, STORY-004
 
 ---
 
-#### STORY-013: n8n Periodic Matching Workflow
+#### STORY-013: Make Periodic Matching Workflow
 **Epic:** EPIC-002 | **Priority:** Must Have | **Points:** 8
 
 **User Story:**
@@ -593,7 +593,7 @@ As the system, I want to calculate commissions on sales, so that cashback is dis
 
 ---
 
-#### STORY-034: n8n Payment Confirmation Workflow
+#### STORY-034: Make Payment Confirmation Workflow
 **Epic:** EPIC-004 | **Priority:** Must Have | **Points:** 8
 
 **User Story:**
@@ -1261,7 +1261,7 @@ As an operator, I want monitoring configured, so that I can track system health.
 | STORY-003 | Create Listing Lambda Function | 5 | EPIC-001 | Must |
 | STORY-005 | Search Listings Lambda Function | 5 | EPIC-001 | Must |
 | STORY-006 | Delete Listing Lambda Function | 3 | EPIC-001 | Must |
-| STORY-012 | n8n Handle New Facebook Post Workflow | 8 | EPIC-002 | Must |
+| STORY-012 | Make Handle New Facebook Post Workflow | 8 | EPIC-002 | Must |
 | STORY-010 | Create Request Lambda Function | 5 | EPIC-002 | Must |
 | STORY-011 | Get Active Requests Lambda | 2 | EPIC-002 | Must |
 | STORY-053 | Send Messenger Message Utility | 5 | EPIC-007 | Must |
@@ -1291,7 +1291,7 @@ As an operator, I want monitoring configured, so that I can track system health.
 
 | Story ID | Title | Points | Epic | Priority |
 |----------|-------|--------|------|----------|
-| STORY-013 | n8n Periodic Matching Workflow | 8 | EPIC-002 | Must |
+| STORY-013 | Make Periodic Matching Workflow | 8 | EPIC-002 | Must |
 | STORY-014 | Notify Buyer on Match | 5 | EPIC-002 | Must |
 | STORY-015 | Notify Seller of Relevant Request | 5 | EPIC-002 | Must |
 | STORY-019 | Create Group Lambda Function | 3 | EPIC-003 | Must |
@@ -1310,7 +1310,7 @@ As an operator, I want monitoring configured, so that I can track system health.
 
 **Risks:**
 - Matching algorithm complexity
-- n8n workflow debugging
+- Make workflow debugging
 
 **Dependencies:**
 - Sprint 2 listings and requests complete
@@ -1327,7 +1327,7 @@ As an operator, I want monitoring configured, so that I can track system health.
 | Story ID | Title | Points | Epic | Priority |
 |----------|-------|--------|------|----------|
 | STORY-032 | Update Payback Balance Lambda | 5 | EPIC-004 | Must |
-| STORY-034 | n8n Payment Confirmation Workflow | 8 | EPIC-004 | Must |
+| STORY-034 | Make Payment Confirmation Workflow | 8 | EPIC-004 | Must |
 | STORY-035 | Release Pending Cashback Scheduler | 5 | EPIC-004 | Must |
 | STORY-038 | Distribute Group Cashback Lambda | 3 | EPIC-004 | Must |
 | STORY-043 | Message Handler Lambda (Entry Point) | 5 | EPIC-006 | Must |
@@ -1476,7 +1476,7 @@ As an operator, I want monitoring configured, so that I can track system health.
 |------|--------|-------------|------------|
 | Facebook API policy changes | Block features | Medium | Monitor FB changelog, abstract API layer |
 | OpenAI API reliability/cost | Chatbot unavailable | Medium | Implement fallback rules, monitor costs |
-| n8n single point of failure | Workflows stop | Medium | Docker with auto-restart, monitoring |
+| Make single point of failure | Workflows stop | Medium | Docker with auto-restart, monitoring |
 
 ### Medium Risk
 

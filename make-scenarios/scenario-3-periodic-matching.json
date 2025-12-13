@@ -1,0 +1,311 @@
+{
+    "name": "Quofind - 3. Periodic Matching",
+    "flow": [
+        {
+            "id": 1,
+            "module": "builtin:BasicScheduler",
+            "version": 1,
+            "parameters": {"interval": 5},
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nSCHEDULER: OGNI 5 MINUTI\n═══════════════════════════════════════════\n\nEsegue il matching periodico tra request attive e nuovi listing.\n\n⏰ CONFIGURAZIONE:\n• Intervallo: 5 minuti\n• Time restrictions (opzionale):\n  - Time from: 08:00\n  - Time to: 23:00\n  - Days: Lun-Dom\n\n💡 PERCHÉ 5 MINUTI:\n• Bilancio tra reattività e costi\n• ~288 esecuzioni/giorno\n• ~8640 esecuzioni/mese\n\n📊 COSTI MAKE:\n• Free tier: 1000 ops/mese (insufficiente)\n• Core: 10000 ops/mese (~$9/mese)\n• Pro: 40000 ops/mese (~$16/mese) ✓ consigliato",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 2,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests/active",
+                "method": "GET",
+                "headers": [],
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nRECUPERA REQUEST ATTIVE\n═══════════════════════════════════════════\n\n🔗 ENDPOINT: GET /requests/active\n\nRestituisce tutte le request non scadute e non soddisfatte.\n\n📥 RISPOSTA:\n{\n  \"data\": [\n    {\n      \"id\": \"req_123\",\n      \"userId\": \"fb_user_id\",\n      \"keywords\": [\"iphone\", \"13\"],\n      \"category\": \"elettronica\",\n      \"maxPrice\": 600,\n      \"location\": \"Milano\",\n      \"notifiedListings\": [\"lst_1\", \"lst_2\"],\n      \"createdAt\": \"2024-01-15T...\",\n      \"expiresAt\": \"2024-01-22T...\"\n    },\n    ...\n  ],\n  \"count\": 25\n}\n\n🔗 VARIABILI:\n• {{2.data}} → Array di request\n• {{2.data.count}} → Numero totale",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 3,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 0},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 600,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: CI SONO REQUEST?\n═══════════════════════════════════════════\n\n→ ROUTE 1: Sì, procedi con matching\n   Filtro: count > 0\n\n→ ROUTE 2: No, termina\n   (else - nessuna azione)\n\n💡 Se non ci sono request attive, lo scenario termina qui per risparmiare operazioni.",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 4,
+                            "module": "builtin:BasicIterator",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {"array": "{{2.data}}"},
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nITERATOR: PER OGNI REQUEST\n═══════════════════════════════════════════\n\nItera su ogni request attiva per cercare match.\n\n📦 VARIABILI PER ITERAZIONE:\n• {{4.id}} → ID request\n• {{4.userId}} → User ID\n• {{4.keywords}} → Keywords ricerca\n• {{4.category}} → Categoria\n• {{4.maxPrice}} → Budget max\n• {{4.location}} → Località\n• {{4.notifiedListings}} → Già notificati\n\n⚠️ ATTENZIONE:\nSe ci sono molte request, questo può generare molte operazioni.\nConsiglio: Limitare a 50-100 request per esecuzione.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Has Active Requests",
+                                "conditions": [[{"a": "{{2.data.count}}", "b": "0", "o": "number:gt"}]]
+                            }
+                        },
+                        {
+                            "id": 5,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings?q={{join(4.keywords; \",\")}}&category={{4.category}}&maxPrice={{4.maxPrice}}&location={{4.location}}&status=active&limit=20",
+                                "method": "GET",
+                                "headers": [],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nCERCA LISTING CORRISPONDENTI\n═══════════════════════════════════════════\n\n🔗 ENDPOINT: GET /listings\n\n📤 PARAMETRI:\n• q: keywords (comma-separated)\n• category: categoria\n• maxPrice: budget massimo\n• location: località\n• status: active\n• limit: 20 (max risultati)\n\n📥 RISPOSTA:\n• {{5.data}} → Array listing\n• {{5.data.count}} → Numero match\n\n💡 La Lambda usa OpenSearch per ricerca full-text con scoring di rilevanza.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 6,
+                            "module": "util:FunctionFilter",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "array": "{{5.data}}",
+                                "condition": "{{!contains(4.notifiedListings; item.id)}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nFILTRA GIÀ NOTIFICATI\n═══════════════════════════════════════════\n\nRimuove i listing già notificati per questa request.\n\n📥 INPUT: {{5.data}} (tutti i match)\n📤 OUTPUT: {{6}} (solo nuovi match)\n\n💡 LOGICA:\ncontains(4.notifiedListings, item.id) = true → già notificato → escludi\ncontains(4.notifiedListings, item.id) = false → nuovo → includi\n\n⚠️ Questo evita di notificare più volte lo stesso listing.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 7,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "parameters": {"else": 0},
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 1800,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nROUTER: NUOVI MATCH?\n═══════════════════════════════════════════\n\n→ ROUTE 1: Sì, notifica\n   Filtro: length(filteredArray) > 0\n\n→ ROUTE 2: No, skip\n   (nessuna notifica necessaria)",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 8,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{4.userId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"🔔 Buone notizie!\\n\\nHo trovato {{length(6)}} nuovi annunci per la tua ricerca:\\n\\\"{{join(4.keywords; \\\", \\\")}}\\\"\\n\\nEccoli:\"}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2100,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nNOTIFICA BUYER: INTRO\n═══════════════════════════════════════════\n\nInvia messaggio introduttivo al buyer.\n\n⚠️ MESSAGE_TAG: CONFIRMED_EVENT_UPDATE\nPermette di inviare fuori dalla finestra 24h.\n\n📤 MESSAGGIO:\n\"🔔 Buone notizie!\nHo trovato X nuovi annunci per la tua ricerca:\"",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "Has New Matches",
+                                                "conditions": [[{"a": "{{length(6)}}", "b": "0", "o": "number:gt"}]]
+                                            }
+                                        },
+                                        {
+                                            "id": 9,
+                                            "module": "builtin:Sleep",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"delay": "500"},
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2400,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nPAUSA 500ms\n═══════════════════════════════════════════\n\nEvita rate limiting di Facebook Messenger.\n\n💡 Facebook limita a ~200 messaggi/secondo.\nCon la pausa evitiamo errori 429.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 10,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{4.userId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"generic\",\"elements\":{{6.carouselElements}}}}}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2700,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nNOTIFICA BUYER: CAROUSEL\n═══════════════════════════════════════════\n\nInvia carousel con i nuovi match.\n\n📤 FORMATO ELEMENTO:\n{\n  \"title\": \"iPhone 13 Pro\",\n  \"subtitle\": \"650€ - Milano\",\n  \"image_url\": \"https://...\",\n  \"buttons\": [\n    {\"type\": \"postback\", \"title\": \"👀 Dettagli\", \"payload\": \"DETAILS_lst_123\"},\n    {\"type\": \"postback\", \"title\": \"📩 Contatta\", \"payload\": \"CONTACT_lst_123\"}\n  ]\n}\n\n💡 {{6.carouselElements}} deve essere formattato dalla Lambda o da un modulo precedente.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 11,
+                                            "module": "builtin:BasicIterator",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"array": "{{6}}"},
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 3000,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nITERATOR: PER OGNI MATCH\n═══════════════════════════════════════════\n\nItera sui nuovi match per notificare i seller.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 12,
+                                            "module": "builtin:Sleep",
+                                            "version": 1,
+                                            "parameters": {},
+                                            "mapper": {"delay": "300"},
+                                            "metadata": {"designer": {"x": 3300, "y": -100, "notes": {"text": "Pausa rate limiting", "position": "bottom"}}}
+                                        },
+                                        {
+                                            "id": 13,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{11.userId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"📣 Qualcuno cerca il tuo prodotto!\\n\\n📦 {{11.title}}\\n🔍 Ricerca: \\\"{{join(4.keywords; \\\", \\\")}}\\\"\\n\\nVuoi essere contattato?\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"✅ Sì\",\"payload\":\"ACCEPT_MATCH_{{4.id}}_{{11.id}}\"},{\"content_type\":\"text\",\"title\":\"❌ No\",\"payload\":\"DECLINE_MATCH\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 3600,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nNOTIFICA SELLER\n═══════════════════════════════════════════\n\nInforma il venditore che qualcuno cerca il suo prodotto.\n\n📤 MESSAGGIO:\n\"📣 Qualcuno cerca il tuo prodotto!\n[Titolo]\nRicerca: [keywords]\"\n\n🔘 QUICK REPLIES:\n• ✅ Sì → ACCEPT_MATCH_[reqId]_[listingId]\n• ❌ No → DECLINE_MATCH\n\n💡 Se accetta, lo Scenario 2 metterà in contatto buyer e seller.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 14,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests/{{4.id}}",
+                                                "method": "PATCH",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"notifiedListings\": {{add(4.notifiedListings; map(6; \"id\"))}}, \"lastMatchedAt\": \"{{now}}\"}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 3900,
+                                                    "y": -100,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nAGGIORNA REQUEST\n═══════════════════════════════════════════\n\nAggiunge i listing notificati alla lista per evitare duplicati.\n\n🔗 ENDPOINT: PATCH /requests/{id}\n\n📤 BODY:\n• notifiedListings: array aggiornato\n• lastMatchedAt: timestamp ultimo match\n\n💡 Alla prossima esecuzione, questi listing saranno filtrati.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false
+        },
+        "designer": {"orphans": []},
+        "notes": "═══════════════════════════════════════════════════════════════\nSCENARIO 3: PERIODIC MATCHING\n═══════════════════════════════════════════════════════════════\n\n📋 DESCRIZIONE:\nEsegue il matching automatico tra request di acquisto e listing di vendita ogni 5 minuti.\n\n🔄 FLUSSO:\n\n1. SCHEDULER trigger ogni 5 minuti\n   ↓\n2. GET /requests/active → Lista request\n   ↓\n3. Se count > 0 → Itera su ogni request\n   ↓\n4. Per ogni request:\n   a. GET /listings con keywords/category/price/location\n   b. Filtra già notificati\n   c. Se nuovi match:\n      - Notifica BUYER con carousel\n      - Notifica ogni SELLER\n      - Aggiorna request con listing notificati\n\n⚙️ CONFIGURAZIONI:\n• YOUR_PAGE_ACCESS_TOKEN (Messenger)\n• Intervallo scheduler: 5 minuti\n• Time restrictions: 08:00-23:00 (opzionale)\n\n📊 OPERAZIONI STIMATE:\n• 0 request: ~2 ops\n• 10 request, 3 match ciascuna: ~100 ops\n• Formula: 2 + (N_requests × (3 + N_new_matches × 3))\n\n💰 COSTI:\n• ~8640 esecuzioni/mese (ogni 5 min)\n• Se media 5 ops/esecuzione: ~43200 ops/mese\n• Piano Pro Make consigliato\n\n🔗 ENDPOINT AWS:\n• GET /requests/active\n• GET /listings (search)\n• PATCH /requests/{id}\n\n⚠️ OTTIMIZZAZIONI:\n• Sleep tra messaggi per rate limiting\n• Limita request per esecuzione se troppe\n• Considera batch notifications"
+    }
+}

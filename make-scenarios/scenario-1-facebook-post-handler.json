@@ -1,0 +1,582 @@
+{
+    "name": "Quofind - 1. Handle Facebook Post",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {
+                "hook": null,
+                "maxResults": 1
+            },
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nWEBHOOK: FACEBOOK PAGE EVENTS\n═══════════════════════════════════════════\n\nRiceve eventi webhook da Facebook quando un utente interagisce con la pagina/gruppo.\n\n📥 EVENTI RICEVUTI:\n• verb='add' → Nuovo post pubblicato\n• verb='edit' → Post modificato\n• verb='remove' → Post eliminato\n\n⚙️ CONFIGURAZIONE FACEBOOK:\n1. developers.facebook.com → La tua App\n2. Webhooks → Page → Subscribe\n3. Callback URL: [URL di questo webhook]\n4. Verify Token: quofind_make_2024\n5. Fields: feed, messages\n\n📦 STRUTTURA DATI RICEVUTI:\n{\n  \"object\": \"page\",\n  \"entry\": [{\n    \"id\": \"PAGE_ID\",\n    \"time\": 1234567890,\n    \"changes\": [{\n      \"field\": \"feed\",\n      \"value\": {\n        \"item\": \"post\",\n        \"verb\": \"add|edit|remove\",\n        \"post_id\": \"123_456\",\n        \"message\": \"Testo del post...\",\n        \"from\": {\n          \"id\": \"USER_FB_ID\",\n          \"name\": \"Nome Utente\"\n        },\n        \"photos\": [\"url1\", \"url2\"]\n      }\n    }]\n  }]\n}\n\n🔗 VARIABILI OUTPUT:\n• {{1.object}} → 'page'\n• {{1.entry[].id}} → ID pagina\n• {{1.entry[].changes[].value.verb}} → Azione\n• {{1.entry[].changes[].value.message}} → Testo\n• {{1.entry[].changes[].value.from.id}} → User ID\n• {{1.entry[].changes[].value.post_id}} → Post ID",
+                        "position": "bottom"
+                    }
+                },
+                "restore": {},
+                "expect": [
+                    {"name": "object", "type": "text"},
+                    {
+                        "name": "entry",
+                        "type": "array",
+                        "spec": [
+                            {"name": "id", "type": "text"},
+                            {"name": "time", "type": "number"},
+                            {
+                                "name": "changes",
+                                "type": "array",
+                                "spec": [
+                                    {"name": "field", "type": "text"},
+                                    {
+                                        "name": "value",
+                                        "type": "collection",
+                                        "spec": [
+                                            {"name": "item", "type": "text"},
+                                            {"name": "verb", "type": "text"},
+                                            {"name": "post_id", "type": "text"},
+                                            {"name": "message", "type": "text"},
+                                            {"name": "photos", "type": "array", "spec": [{"name": "url", "type": "text"}]},
+                                            {
+                                                "name": "from",
+                                                "type": "collection",
+                                                "spec": [
+                                                    {"name": "id", "type": "text"},
+                                                    {"name": "name", "type": "text"}
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 0},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: SMISTAMENTO EVENTI FACEBOOK\n═══════════════════════════════════════════\n\nIndirizza il flusso in base al tipo di azione sul post.\n\n🔀 ROUTES CONFIGURATE:\n\n→ ROUTE 1 (SOPRA): NUOVO POST\n  Filtro: verb = 'add'\n  Flusso: Gemini → Parse → Crea Listing/Request → Notifica\n\n→ ROUTE 2 (CENTRO): POST MODIFICATO\n  Filtro: verb = 'edit'\n  Flusso: Gemini → Parse → Aggiorna Listing/Request → Notifica\n\n→ ROUTE 3 (SOTTO): POST ELIMINATO\n  Filtro: verb = 'remove'\n  Flusso: Elimina da DB → Notifica\n\n⚠️ IMPORTANTE:\nOgni route ha un FILTRO che determina quando viene eseguita.\nSe nessun filtro corrisponde, il flusso si ferma qui.",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 3,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"contents\":[{\"parts\":[{\"text\":\"Sei un assistente per un marketplace italiano. Analizza questo post Facebook e classifica se è un ANNUNCIO DI VENDITA (listing), una RICHIESTA DI ACQUISTO (request), o ALTRO (other).\\n\\nPOST DA ANALIZZARE:\\n{{1.entry[].changes[].value.message}}\\n\\nRispondi SOLO con un JSON valido (NO markdown, NO ```json), con questa struttura ESATTA:\\n{\\n  \\\"type\\\": \\\"listing\\\" oppure \\\"request\\\" oppure \\\"other\\\",\\n  \\\"confidence\\\": numero da 0 a 1,\\n  \\\"title\\\": \\\"titolo breve e descrittivo\\\",\\n  \\\"description\\\": \\\"descrizione completa dell'articolo o richiesta\\\",\\n  \\\"category\\\": \\\"elettronica\\\" oppure \\\"abbigliamento\\\" oppure \\\"casa\\\" oppure \\\"auto\\\" oppure \\\"sport\\\" oppure \\\"libri\\\" oppure \\\"giochi\\\" oppure \\\"altro\\\",\\n  \\\"price\\\": numero oppure null se non specificato,\\n  \\\"currency\\\": \\\"EUR\\\",\\n  \\\"location\\\": \\\"città o zona geografica\\\" oppure null,\\n  \\\"keywords\\\": [\\\"keyword1\\\", \\\"keyword2\\\", \\\"keyword3\\\"],\\n  \\\"condition\\\": \\\"nuovo\\\" oppure \\\"usato\\\" oppure \\\"ricondizionato\\\" oppure null,\\n  \\\"negotiable\\\": true oppure false,\\n  \\\"urgency\\\": \\\"alta\\\" oppure \\\"media\\\" oppure \\\"bassa\\\" oppure null\\n}\\n\\nREGOLE:\\n- Se il post è un annuncio di vendita → type: \\\"listing\\\"\\n- Se il post cerca qualcosa da comprare → type: \\\"request\\\"\\n- Se non è né vendita né ricerca → type: \\\"other\\\"\\n- Estrai il prezzo se menzionato (es: \\\"500 euro\\\" → price: 500)\\n- Estrai la località se menzionata\\n- Genera keywords utili per la ricerca\\n- confidence indica quanto sei sicuro della classificazione\"}]}],\"generationConfig\":{\"temperature\":0.2,\"maxOutputTokens\":800,\"topP\":0.8}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": -300,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nGEMINI AI: ANALISI NUOVO POST\n═══════════════════════════════════════════\n\nInvia il testo del post a Google Gemini per analisi semantica.\n\n⚠️ CONFIGURAZIONE OBBLIGATORIA:\nSostituisci YOUR_GEMINI_API_KEY nell'URL!\nOttieni la key da: https://aistudio.google.com/app/apikey\n\n🤖 COSA FA L'AI:\n1. Legge il testo del post Facebook\n2. Classifica: listing (vendita) / request (ricerca) / other\n3. Estrae informazioni strutturate:\n   - Titolo sintetico\n   - Descrizione completa\n   - Categoria merceologica\n   - Prezzo e valuta\n   - Località\n   - Keywords per ricerca\n   - Condizione (nuovo/usato)\n   - Se prezzo trattabile\n   - Livello urgenza\n4. Assegna confidence score\n\n📤 PARAMETRI GEMINI:\n• model: gemini-1.5-flash (veloce, economico)\n• temperature: 0.2 (output deterministico)\n• maxOutputTokens: 800\n• topP: 0.8\n\n💰 COSTI:\n~$0.00015 per richiesta (molto economico)\n~1000 richieste = $0.15\n\n📦 OUTPUT:\n{{3.data.candidates[].content.parts[].text}}\n→ Stringa JSON da parsare nel modulo successivo\n\n❌ ERRORI POSSIBILI:\n• 400: API key invalida\n• 429: Rate limit (300 req/min free tier)\n• 500: Errore Gemini",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Is New Post (verb=add)",
+                                "conditions": [[{"a": "{{1.entry[].changes[].value.verb}}", "b": "add", "o": "text:equal"}]]
+                            }
+                        },
+                        {
+                            "id": 4,
+                            "module": "json:ParseJSON",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {
+                                "json": "{{3.data.candidates[].content.parts[].text}}"
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": -300,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nJSON PARSER: RISPOSTA GEMINI\n═══════════════════════════════════════════\n\nConverte la stringa JSON di Gemini in un oggetto strutturato.\n\n📥 INPUT:\n{{3.data.candidates[].content.parts[].text}}\n\nEsempio risposta Gemini:\n{\n  \"type\": \"listing\",\n  \"confidence\": 0.95,\n  \"title\": \"iPhone 13 Pro 256GB\",\n  \"description\": \"Vendo iPhone 13 Pro...\",\n  \"category\": \"elettronica\",\n  \"price\": 650,\n  \"currency\": \"EUR\",\n  \"location\": \"Milano\",\n  \"keywords\": [\"iphone\", \"apple\", \"smartphone\"],\n  \"condition\": \"usato\",\n  \"negotiable\": true,\n  \"urgency\": \"media\"\n}\n\n📤 OUTPUT - Variabili disponibili:\n• {{4.type}} → 'listing' | 'request' | 'other'\n• {{4.confidence}} → 0.0 - 1.0\n• {{4.title}} → Titolo estratto\n• {{4.description}} → Descrizione\n• {{4.category}} → Categoria\n• {{4.price}} → Prezzo numerico o null\n• {{4.currency}} → 'EUR'\n• {{4.location}} → Località o null\n• {{4.keywords}} → Array keywords\n• {{4.condition}} → Condizione o null\n• {{4.negotiable}} → true/false\n• {{4.urgency}} → Urgenza o null\n\n❌ ERRORI:\nSe Gemini restituisce JSON malformato, questo modulo FALLISCE.\nConsiglio: aggiungi Error Handler → Ignora e continua",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 5,
+                            "module": "builtin:BasicRouter",
+                            "version": 1,
+                            "parameters": {"else": 0},
+                            "mapper": null,
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": -300,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nROUTER: TIPO CONTENUTO\n═══════════════════════════════════════════\n\nSmista in base al tipo identificato da Gemini.\n\n🔀 ROUTES:\n\n→ ROUTE A: LISTING (Annuncio vendita)\n  Filtro: type='listing' AND confidence>=0.7\n  Azione: Crea listing nel database\n\n→ ROUTE B: REQUEST (Richiesta acquisto)\n  Filtro: type='request' AND confidence>=0.7\n  Azione: Crea request + trigger matching\n\n→ ROUTE C: LOW CONFIDENCE\n  Filtro: confidence<0.7\n  Azione: Chiedi conferma all'utente\n\n→ ROUTE D: OTHER (default)\n  Nessuna azione (post ignorato)\n\n💡 SOGLIA CONFIDENCE:\n0.7 = 70% sicurezza minima per procedere\nSotto questa soglia, meglio chiedere conferma.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "routes": [
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 6,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "qs": [],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"userId\": \"{{1.entry[].changes[].value.from.id}}\", \"userName\": \"{{1.entry[].changes[].value.from.name}}\", \"facebookPostId\": \"{{1.entry[].changes[].value.post_id}}\", \"title\": \"{{4.title}}\", \"description\": \"{{4.description}}\", \"category\": \"{{4.category}}\", \"price\": {{4.price}}, \"currency\": \"{{4.currency}}\", \"location\": \"{{4.location}}\", \"keywords\": {{4.keywords}}, \"condition\": \"{{4.condition}}\", \"negotiable\": {{4.negotiable}}, \"urgency\": \"{{4.urgency}}\", \"source\": \"facebook_post\", \"aiConfidence\": {{4.confidence}}, \"originalMessage\": \"{{1.entry[].changes[].value.message}}\", \"photos\": {{1.entry[].changes[].value.photos}}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": -450,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nCREA LISTING SU AWS\n═══════════════════════════════════════════\n\nSalva l'annuncio di vendita nel database DynamoDB via Lambda.\n\n🔗 ENDPOINT:\nPOST https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings\n\n📤 DATI INVIATI:\n{\n  \"userId\": \"FB_USER_ID\",\n  \"userName\": \"Nome Utente\",\n  \"facebookPostId\": \"123_456\",\n  \"title\": \"iPhone 13 Pro\",\n  \"description\": \"Vendo iPhone...\",\n  \"category\": \"elettronica\",\n  \"price\": 650,\n  \"currency\": \"EUR\",\n  \"location\": \"Milano\",\n  \"keywords\": [\"iphone\", \"apple\"],\n  \"condition\": \"usato\",\n  \"negotiable\": true,\n  \"urgency\": \"media\",\n  \"source\": \"facebook_post\",\n  \"aiConfidence\": 0.95,\n  \"originalMessage\": \"Testo originale...\",\n  \"photos\": [\"url1\", \"url2\"]\n}\n\n📥 RISPOSTA:\n{\n  \"success\": true,\n  \"data\": {\n    \"id\": \"lst_abc123\",\n    \"createdAt\": \"2024-01-15T10:30:00Z\",\n    \"expiresAt\": \"2024-02-14T10:30:00Z\"\n  }\n}\n\n🔗 VARIABILI OUTPUT:\n• {{6.data.id}} → ID listing creato\n• {{6.data.createdAt}} → Data creazione\n• {{6.data.expiresAt}} → Scadenza (30gg)\n\n❌ ERRORI:\n• 400: Dati mancanti/invalidi\n• 409: Listing già esiste (stesso post_id)\n• 500: Errore database",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "Is Listing + High Confidence",
+                                                "conditions": [
+                                                    [
+                                                        {"a": "{{4.type}}", "b": "listing", "o": "text:equal"},
+                                                        {"a": "{{4.confidence}}", "b": "0.7", "o": "number:gte"}
+                                                    ]
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "id": 7,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "qs": [],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"✅ Annuncio creato con successo!\\n\\n📦 {{4.title}}\\n💰 {{4.price}}€{{if(4.negotiable; \\\" (trattabile)\\\"; \\\"\\\")}}\\n📍 {{4.location}}\\n🏷️ {{4.category}}\\n\\nID: {{6.data.id}}\\n\\nIl tuo annuncio è ora visibile nel marketplace e sarà attivo per 30 giorni.\\n\\nQuando vendi, riceverai cashback!\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"📋 I miei annunci\",\"payload\":\"MY_LISTINGS\"},{\"content_type\":\"text\",\"title\":\"💰 Saldo cashback\",\"payload\":\"BALANCE\"},{\"content_type\":\"text\",\"title\":\"❓ Aiuto\",\"payload\":\"HELP\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1800,
+                                                    "y": -450,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nMESSENGER: CONFERMA LISTING CREATO\n═══════════════════════════════════════════\n\nInvia messaggio di conferma all'utente via Facebook Messenger.\n\n⚠️ CONFIGURAZIONE:\nSostituisci YOUR_PAGE_ACCESS_TOKEN!\nOttienilo da: Facebook Developer → Tua App → Messenger → Page Access Token\n\n📤 MESSAGGIO INVIATO:\n\"✅ Annuncio creato con successo!\n\n📦 [Titolo]\n💰 [Prezzo]€ (trattabile)\n📍 [Località]\n🏷️ [Categoria]\n\nID: [listing_id]\n\nIl tuo annuncio è ora visibile...\"\n\n🔘 QUICK REPLIES:\n• 📋 I miei annunci → MY_LISTINGS\n• 💰 Saldo cashback → BALANCE\n• ❓ Aiuto → HELP\n\n💡 QUICK REPLIES:\nPulsanti cliccabili che facilitano la navigazione.\nQuando l'utente clicca, il payload viene inviato allo Scenario 2 (Messenger Handler).\n\n❌ ERRORI:\n• 400: Token invalido\n• 10: Utente non ha mai interagito con la pagina\n• 551: Utente ha bloccato i messaggi",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 8,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/requests",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "qs": [],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"userId\": \"{{1.entry[].changes[].value.from.id}}\", \"userName\": \"{{1.entry[].changes[].value.from.name}}\", \"facebookPostId\": \"{{1.entry[].changes[].value.post_id}}\", \"title\": \"{{4.title}}\", \"description\": \"{{4.description}}\", \"category\": \"{{4.category}}\", \"maxPrice\": {{4.price}}, \"currency\": \"{{4.currency}}\", \"location\": \"{{4.location}}\", \"keywords\": {{4.keywords}}, \"condition\": \"{{4.condition}}\", \"urgency\": \"{{4.urgency}}\", \"source\": \"facebook_post\", \"aiConfidence\": {{4.confidence}}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": -150,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nCREA REQUEST SU AWS\n═══════════════════════════════════════════\n\nSalva la richiesta di acquisto nel database.\n\n🔗 ENDPOINT:\nPOST /requests\n\n📤 DATI:\n• maxPrice invece di price (budget massimo)\n• keywords per matching automatico\n• urgency per priorità matching\n\n📥 RISPOSTA:\n{{8.data.id}} → ID request creata\n\n💡 MATCHING:\nLo Scenario 3 (Periodic Matching) cercherà automaticamente listing corrispondenti ogni 5 minuti.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "Is Request + High Confidence",
+                                                "conditions": [
+                                                    [
+                                                        {"a": "{{4.type}}", "b": "request", "o": "text:equal"},
+                                                        {"a": "{{4.confidence}}", "b": "0.7", "o": "number:gte"}
+                                                    ]
+                                                ]
+                                            }
+                                        },
+                                        {
+                                            "id": 9,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/internal/matching",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "qs": [],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"requestId\": \"{{8.data.id}}\", \"immediate\": true}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1800,
+                                                    "y": -150,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nTRIGGER MATCHING IMMEDIATO\n═══════════════════════════════════════════\n\nAvvia subito il matching per questa nuova request.\n\n🔗 ENDPOINT:\nPOST /internal/matching\n\n📤 BODY:\n• requestId: ID della request appena creata\n• immediate: true (esegui subito)\n\n💡 PERCHÉ:\nNon aspettare lo scheduler ogni 5 min.\nL'utente vuole risultati immediati.\n\n📥 RISPOSTA:\n{{9.data.matches}} → Array di listing corrispondenti\n{{9.data.count}} → Numero di match trovati",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "id": 10,
+                                            "module": "builtin:BasicRouter",
+                                            "version": 1,
+                                            "parameters": {"else": 0},
+                                            "mapper": null,
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 2100,
+                                                    "y": -150,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nROUTER: RISULTATI MATCHING\n═══════════════════════════════════════════\n\n→ ROUTE A: Match trovati\n  Filtro: count > 0\n  Azione: Invia carousel risultati\n\n→ ROUTE B: Nessun match\n  Filtro: count = 0\n  Azione: Messaggio \"ti avviseremo\"",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "routes": [
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 11,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "qs": [],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"attachment\":{\"type\":\"template\",\"payload\":{\"template_type\":\"generic\",\"elements\":{{9.data.matches}}}}}}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {
+                                                                "designer": {
+                                                                    "x": 2400,
+                                                                    "y": -250,
+                                                                    "notes": {
+                                                                        "text": "═══════════════════════════════════════════\nMESSENGER: CAROUSEL RISULTATI\n═══════════════════════════════════════════\n\nInvia i risultati del matching come carousel interattivo.\n\n📤 FORMATO CAROUSEL:\n• Fino a 10 elementi\n• Ogni elemento: immagine, titolo, sottotitolo, pulsanti\n• Pulsanti: Contatta, Dettagli, Nascondi\n\n💡 L'array {{9.data.matches}} deve essere già formattato come elementi carousel dalla Lambda.",
+                                                                        "position": "bottom"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "filter": {
+                                                                "name": "Has Matches",
+                                                                "conditions": [[{"a": "{{9.data.count}}", "b": "0", "o": "number:gt"}]]
+                                                            }
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "flow": [
+                                                        {
+                                                            "id": 12,
+                                                            "module": "http:ActionSendData",
+                                                            "version": 3,
+                                                            "parameters": {},
+                                                            "mapper": {
+                                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                                "method": "POST",
+                                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                                "qs": [],
+                                                                "bodyType": "raw",
+                                                                "contentType": "application/json",
+                                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🔍 Richiesta registrata!\\n\\nCerchi: {{4.title}}\\n💰 Budget: {{if(4.price; concat(\\\"fino a \\\"; 4.price; \\\"€\\\"); \\\"non specificato\\\")}}\\n📍 Zona: {{if(4.location; 4.location; \\\"qualsiasi\\\")}}\\n\\nAl momento non ci sono annunci corrispondenti, ma ti avviseremo appena ne arrivano!\\n\\n🔔 Riceverai una notifica quando troviamo qualcosa per te.\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"🔍 Cerca altro\",\"payload\":\"SEARCH\"},{\"content_type\":\"text\",\"title\":\"📋 Le mie ricerche\",\"payload\":\"MY_REQUESTS\"},{\"content_type\":\"text\",\"title\":\"❓ Aiuto\",\"payload\":\"HELP\"}]}}",
+                                                                "parseResponse": true
+                                                            },
+                                                            "metadata": {
+                                                                "designer": {
+                                                                    "x": 2400,
+                                                                    "y": -50,
+                                                                    "notes": {
+                                                                        "text": "═══════════════════════════════════════════\nMESSENGER: NESSUN RISULTATO\n═══════════════════════════════════════════\n\nInforma l'utente che la ricerca è stata salvata.\n\n📤 MESSAGGIO:\n\"🔍 Richiesta registrata!\n\nCerchi: [titolo]\nBudget: [prezzo]\nZona: [località]\n\nAl momento non ci sono annunci corrispondenti, ma ti avviseremo appena ne arrivano!\"\n\n💡 La request rimane attiva per 7 giorni.\nLo Scenario 3 controllerà ogni 5 minuti.",
+                                                                        "position": "bottom"
+                                                                    }
+                                                                }
+                                                            },
+                                                            "filter": {
+                                                                "name": "No Matches",
+                                                                "conditions": [[{"a": "{{9.data.count}}", "b": "0", "o": "number:equal"}]]
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "flow": [
+                                        {
+                                            "id": 13,
+                                            "module": "http:ActionSendData",
+                                            "version": 3,
+                                            "parameters": {},
+                                            "mapper": {
+                                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                                "method": "POST",
+                                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                                "qs": [],
+                                                "bodyType": "raw",
+                                                "contentType": "application/json",
+                                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🤔 Non sono sicuro di aver capito bene il tuo post.\\n\\nÈ un annuncio di vendita o stai cercando qualcosa?\\n\\nSeleziona un'opzione:\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"📦 Sto vendendo\",\"payload\":\"CONFIRM_LISTING_{{1.entry[].changes[].value.post_id}}\"},{\"content_type\":\"text\",\"title\":\"🔍 Sto cercando\",\"payload\":\"CONFIRM_REQUEST_{{1.entry[].changes[].value.post_id}}\"},{\"content_type\":\"text\",\"title\":\"❌ Ignora\",\"payload\":\"IGNORE_{{1.entry[].changes[].value.post_id}}\"}]}}",
+                                                "parseResponse": true
+                                            },
+                                            "metadata": {
+                                                "designer": {
+                                                    "x": 1500,
+                                                    "y": 150,
+                                                    "notes": {
+                                                        "text": "═══════════════════════════════════════════\nMESSENGER: CHIEDI CONFERMA (LOW CONFIDENCE)\n═══════════════════════════════════════════\n\nSe Gemini non è sicuro (confidence < 0.7), chiedi all'utente.\n\n📤 MESSAGGIO:\n\"🤔 Non sono sicuro di aver capito bene...\nÈ un annuncio di vendita o stai cercando?\"\n\n🔘 QUICK REPLIES:\n• 📦 Sto vendendo → CONFIRM_LISTING_[post_id]\n• 🔍 Sto cercando → CONFIRM_REQUEST_[post_id]\n• ❌ Ignora → IGNORE_[post_id]\n\n💡 I payload includono il post_id per permettere allo Scenario 2 di processare la conferma dell'utente.",
+                                                        "position": "bottom"
+                                                    }
+                                                }
+                                            },
+                                            "filter": {
+                                                "name": "Low Confidence (<0.7)",
+                                                "conditions": [[{"a": "{{4.confidence}}", "b": "0.7", "o": "number:lt"}]]
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 14,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"contents\":[{\"parts\":[{\"text\":\"Analizza questo post Facebook MODIFICATO e restituisci i dati aggiornati.\\n\\nPOST MODIFICATO:\\n{{1.entry[].changes[].value.message}}\\n\\nRispondi SOLO con JSON valido (stesso formato di prima).\"}]}],\"generationConfig\":{\"temperature\":0.2,\"maxOutputTokens\":800}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nGEMINI AI: ANALISI POST MODIFICATO\n═══════════════════════════════════════════\n\nRi-analizza il post modificato per estrarre i nuovi dati.\n\n💡 QUANDO SCATTA:\nQuando verb = 'edit' (utente ha modificato il post)\n\nPuò cambiare:\n• Prezzo aggiornato\n• Descrizione modificata\n• Aggiunta/rimozione foto\n\nIl flusso poi aggiornerà il listing/request esistente.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Is Edit (verb=edit)",
+                                "conditions": [[{"a": "{{1.entry[].changes[].value.verb}}", "b": "edit", "o": "text:equal"}]]
+                            }
+                        },
+                        {
+                            "id": 15,
+                            "module": "json:ParseJSON",
+                            "version": 1,
+                            "parameters": {},
+                            "mapper": {"json": "{{14.data.candidates[].content.parts[].text}}"},
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nJSON PARSER: DATI AGGIORNATI\n═══════════════════════════════════════════\n\nStesso parsing del modulo 4.\nOutput in {{15.xxx}}",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 16,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings/by-post/{{1.entry[].changes[].value.post_id}}",
+                                "method": "PUT",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"title\": \"{{15.title}}\", \"description\": \"{{15.description}}\", \"price\": {{15.price}}, \"location\": \"{{15.location}}\", \"keywords\": {{15.keywords}}, \"condition\": \"{{15.condition}}\", \"negotiable\": {{15.negotiable}}, \"updatedAt\": \"{{now}}\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1200,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nAGGIORNA LISTING/REQUEST\n═══════════════════════════════════════════\n\n🔗 ENDPOINT:\nPUT /listings/by-post/{post_id}\n\nCerca il listing tramite facebookPostId e lo aggiorna con i nuovi dati.\n\n💡 Se il listing non esiste (post originale non era stato processato), l'API restituisce 404 e il flusso si ferma qui (non è un errore critico).",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 17,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"✏️ Annuncio aggiornato!\\n\\n{{15.title}}\\n💰 {{15.price}}€\\n\\nLe modifiche sono ora visibili nel marketplace.\"}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nMESSENGER: CONFERMA AGGIORNAMENTO\n═══════════════════════════════════════════\n\nNotifica l'utente che il suo annuncio è stato aggiornato.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "flow": [
+                        {
+                            "id": 18,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/listings/by-post/{{1.entry[].changes[].value.post_id}}",
+                                "method": "DELETE",
+                                "headers": [],
+                                "qs": [],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 600,
+                                    "y": 300,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nELIMINA LISTING DA AWS\n═══════════════════════════════════════════\n\nQuando l'utente elimina il post Facebook, rimuove automaticamente l'annuncio dal database.\n\n🔗 ENDPOINT:\nDELETE /listings/by-post/{post_id}\n\n💡 SINCRONIZZAZIONE:\nPost eliminato su FB → Listing eliminato dal marketplace\n\nSe il listing non esisteva → 404 (ignorato)\nSe esisteva → 200 + listing eliminato\n\n⚠️ NOTA:\nElimina anche eventuali request associate allo stesso post_id.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Is Delete (verb=remove)",
+                                "conditions": [[{"a": "{{1.entry[].changes[].value.verb}}", "b": "remove", "o": "text:equal"}]]
+                            }
+                        },
+                        {
+                            "id": 19,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "qs": [],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{1.entry[].changes[].value.from.id}}\"},\"messaging_type\":\"RESPONSE\",\"message\":{\"text\":\"🗑️ Annuncio rimosso dal marketplace.\\n\\nSe hai venduto l'oggetto e vuoi registrare la vendita per il cashback, rispondi con:\\n\\\"Venduto a [prezzo]€\\\"\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"✅ Ho venduto\",\"payload\":\"SOLD_{{1.entry[].changes[].value.post_id}}\"},{\"content_type\":\"text\",\"title\":\"📦 Nuovo annuncio\",\"payload\":\"NEW_LISTING\"},{\"content_type\":\"text\",\"title\":\"💰 Saldo\",\"payload\":\"BALANCE\"}]}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 900,
+                                    "y": 300,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nMESSENGER: CONFERMA ELIMINAZIONE\n═══════════════════════════════════════════\n\nNotifica l'utente e chiede se ha venduto.\n\n📤 MESSAGGIO:\n\"🗑️ Annuncio rimosso...\nSe hai venduto, rispondi 'Venduto a [prezzo]€'\"\n\n🔘 QUICK REPLIES:\n• ✅ Ho venduto → SOLD_[post_id]\n• 📦 Nuovo annuncio → NEW_LISTING\n• 💰 Saldo → BALANCE\n\n💡 Se l'utente conferma la vendita, lo Scenario 2 processerà il payload SOLD_xxx e avvierà il flusso cashback.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "metadata": {
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false,
+            "confidential": false,
+            "dataloss": false,
+            "dlq": false
+        },
+        "designer": {
+            "orphans": []
+        },
+        "notes": "═══════════════════════════════════════════════════════════════\nSCENARIO 1: HANDLE FACEBOOK POST\n═══════════════════════════════════════════════════════════════\n\n📋 DESCRIZIONE:\nIntercetta tutti i post pubblicati nei gruppi/pagine Facebook collegati e li processa automaticamente:\n- Nuovi post → Analisi AI → Creazione listing/request\n- Post modificati → Aggiornamento dati\n- Post eliminati → Rimozione dal database\n\n🔄 FLUSSO COMPLETO:\n\n1. WEBHOOK riceve evento da Facebook\n   ↓\n2. ROUTER smista per tipo (add/edit/remove)\n   ↓\n3a. ADD → Gemini analizza → Router tipo:\n    • Listing (vendita) → Crea su DB → Notifica\n    • Request (ricerca) → Crea + Matching immediato → Notifica\n    • Low confidence → Chiedi conferma utente\n   ↓\n3b. EDIT → Ri-analizza → Aggiorna DB → Notifica\n   ↓\n3c. REMOVE → Elimina da DB → Chiedi se venduto\n\n⚙️ CONFIGURAZIONI RICHIESTE:\n\n1. YOUR_GEMINI_API_KEY\n   → https://aistudio.google.com/app/apikey\n\n2. YOUR_PAGE_ACCESS_TOKEN\n   → Facebook Developer → App → Messenger Settings\n\n3. Webhook URL su Facebook\n   → L'URL di questo scenario\n\n📊 OPERAZIONI MAKE STIMATE:\n• Nuovo post: ~6-8 operazioni\n• Post modificato: ~4 operazioni\n• Post eliminato: ~3 operazioni\n\n💰 COSTI STIMATI (1000 post/mese):\n• Make: ~7000 operazioni (piano Pro consigliato)\n• Gemini: ~$0.15\n• AWS: ~$1-2 (Free Tier copre molto)\n\n🔗 SCENARI COLLEGATI:\n• Scenario 2: Gestisce risposte utente (CONFIRM_*, SOLD_*, etc.)\n• Scenario 3: Matching periodico per request\n• Scenario 4: Cashback quando venduto\n\n🐛 DEBUG:\n• History → Click su esecuzione → Espandi moduli\n• Controlla {{x.data}} per vedere risposte API\n• Errori comuni: token scaduti, API key invalide"
+    }
+}

@@ -6,7 +6,7 @@ version = 0.1
 [default.global.parameters]
 stack_name = "quofind-marketplace"
 resolve_s3 = true
-region = "eu-south-1"
+region = "eu-west-1"
 
 [default.build.parameters]
 cached = true

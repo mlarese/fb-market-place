@@ -1,0 +1,415 @@
+{
+    "name": "Quofind - 4. Cashback Distribution",
+    "flow": [
+        {
+            "id": 1,
+            "module": "gateway:CustomWebHook",
+            "version": 1,
+            "parameters": {"hook": null, "maxResults": 1},
+            "mapper": {},
+            "metadata": {
+                "designer": {
+                    "x": 0,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nWEBHOOK: PAYMENT CONFIRMED\n═══════════════════════════════════════════\n\nRiceve notifica quando un pagamento/vendita viene confermato.\n\n📥 TRIGGER:\nChiamato dalla Lambda Payments quando:\n• Venditore conferma vendita via Messenger\n• Pagamento esterno confermato\n• Admin conferma manualmente\n\n📦 PAYLOAD:\n{\n  \"event\": \"payment.confirmed\",\n  \"paymentId\": \"pay_abc123\",\n  \"listingId\": \"lst_xyz\",\n  \"sellerId\": \"fb_seller_id\",\n  \"buyerId\": \"fb_buyer_id\",\n  \"amount\": 350.00,\n  \"currency\": \"EUR\",\n  \"timestamp\": \"2024-01-15T...\"\n}\n\n🔗 VARIABILI:\n• {{1.paymentId}} → ID pagamento\n• {{1.sellerId}} → Venditore\n• {{1.buyerId}} → Compratore\n• {{1.amount}} → Importo vendita\n\n💡 CONFIGURAZIONE:\nL'URL di questo webhook va inserito nella Lambda Payments come MAKE_CASHBACK_WEBHOOK_URL.",
+                        "position": "bottom"
+                    }
+                },
+                "expect": [
+                    {"name": "event", "type": "text"},
+                    {"name": "paymentId", "type": "text"},
+                    {"name": "listingId", "type": "text"},
+                    {"name": "sellerId", "type": "text"},
+                    {"name": "buyerId", "type": "text"},
+                    {"name": "amount", "type": "number"},
+                    {"name": "currency", "type": "text"},
+                    {"name": "timestamp", "type": "text"}
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/payments/{{1.paymentId}}",
+                "method": "GET",
+                "headers": [],
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 300,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nRECUPERA DETTAGLI PAGAMENTO\n═══════════════════════════════════════════\n\n🔗 ENDPOINT: GET /payments/{id}\n\n📥 RISPOSTA:\n{\n  \"id\": \"pay_abc123\",\n  \"listingId\": \"lst_xyz\",\n  \"sellerId\": \"fb_seller\",\n  \"buyerId\": \"fb_buyer\",\n  \"amount\": 350.00,\n  \"sellerGroupId\": \"grp_123\" | null,\n  \"buyerGroupId\": \"grp_456\" | null,\n  \"sellerReferrerId\": \"fb_referrer\" | null,\n  \"buyerReferrerId\": \"fb_referrer2\" | null,\n  \"listing\": {...},\n  \"seller\": {...},\n  \"buyer\": {...}\n}\n\n💡 Include info su gruppi e referrer per calcolare distribuzione cashback.",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 3,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/config",
+                "method": "GET",
+                "headers": [],
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 600,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nRECUPERA CONFIG CASHBACK\n═══════════════════════════════════════════\n\n🔗 ENDPOINT: GET /cashback/config\n\n📥 RISPOSTA:\n{\n  \"commissionRate\": 0.05,      // 5% commissione piattaforma\n  \"sellerCashbackRate\": 0.02,  // 2% al venditore\n  \"buyerCashbackRate\": 0.01,   // 1% al compratore\n  \"leaderCashbackRate\": 0.005, // 0.5% al group leader\n  \"referrerCashbackRate\": 0.005, // 0.5% al referrer\n  \"pendingDays\": 30,           // Giorni prima del rilascio\n  \"minWithdrawal\": 10.00       // Minimo prelievo\n}\n\n💡 DISTRIBUZIONE ESEMPIO (vendita 100€):\n• Commissione: 5€\n• Venditore: 2€\n• Compratore: 1€\n• Group leader: 0.50€\n• Referrer: 0.50€\n• Piattaforma: 1€",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 4,
+            "module": "util:SetVariables",
+            "version": 1,
+            "parameters": {},
+            "mapper": {
+                "variables": [
+                    {"name": "commission", "value": "{{1.amount * 3.data.commissionRate}}"},
+                    {"name": "sellerCashback", "value": "{{1.amount * 3.data.sellerCashbackRate}}"},
+                    {"name": "buyerCashback", "value": "{{1.amount * 3.data.buyerCashbackRate}}"},
+                    {"name": "leaderCashback", "value": "{{1.amount * 3.data.leaderCashbackRate}}"},
+                    {"name": "referrerCashback", "value": "{{1.amount * 3.data.referrerCashbackRate}}"},
+                    {"name": "releaseDate", "value": "{{addDays(now; 3.data.pendingDays)}}"}
+                ]
+            },
+            "metadata": {
+                "designer": {
+                    "x": 900,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nCALCOLA IMPORTI CASHBACK\n═══════════════════════════════════════════\n\n📊 CALCOLI:\n• commission = amount × commissionRate\n• sellerCashback = amount × sellerCashbackRate\n• buyerCashback = amount × buyerCashbackRate\n• leaderCashback = amount × leaderCashbackRate\n• referrerCashback = amount × referrerCashbackRate\n• releaseDate = now + pendingDays\n\n📤 VARIABILI OUTPUT:\n• {{4.commission}} → Es: 17.50€\n• {{4.sellerCashback}} → Es: 7.00€\n• {{4.buyerCashback}} → Es: 3.50€\n• {{4.leaderCashback}} → Es: 1.75€\n• {{4.referrerCashback}} → Es: 1.75€\n• {{4.releaseDate}} → Data rilascio",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 5,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/credit",
+                "method": "POST",
+                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "body": "{\"userId\": \"{{1.sellerId}}\", \"amount\": {{4.sellerCashback}}, \"type\": \"sale_cashback\", \"status\": \"pending\", \"referenceId\": \"{{1.paymentId}}\", \"releaseDate\": \"{{4.releaseDate}}\", \"description\": \"Cashback vendita {{2.data.listing.title}}\"}",
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1200,
+                    "y": -200,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nACCREDITA CASHBACK VENDITORE\n═══════════════════════════════════════════\n\n🔗 ENDPOINT: POST /cashback/credit\n\n📤 BODY:\n• userId: ID venditore\n• amount: importo cashback\n• type: 'sale_cashback'\n• status: 'pending' (diventa 'available' dopo 30gg)\n• referenceId: ID pagamento\n• releaseDate: quando diventa prelevabile\n\n💡 STATUS PENDING:\nIl cashback è visibile ma non prelevabile.\nDopo 30 giorni, lo Scenario 5 lo rilascia.",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 6,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                "method": "POST",
+                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "body": "{\"recipient\":{\"id\":\"{{1.sellerId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"💰 Cashback accreditato!\\n\\nHai guadagnato {{4.sellerCashback}}€ dalla vendita di:\\n📦 {{2.data.listing.title}}\\n💵 Venduto a: {{1.amount}}€\\n\\n⏳ Disponibile dal: {{formatDate(4.releaseDate; \\\"DD/MM/YYYY\\\")}}\\n\\nGrazie per aver usato Quofind! 🎉\",\"quick_replies\":[{\"content_type\":\"text\",\"title\":\"💰 Vedi saldo\",\"payload\":\"BALANCE\"},{\"content_type\":\"text\",\"title\":\"📜 Storico\",\"payload\":\"TRANSACTIONS\"}]}}",
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1500,
+                    "y": -200,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nNOTIFICA VENDITORE\n═══════════════════════════════════════════\n\n📤 MESSAGGIO:\n\"💰 Cashback accreditato!\n\nHai guadagnato X€ dalla vendita di:\n[Titolo]\nVenduto a: Y€\n\nDisponibile dal: DD/MM/YYYY\"",
+                        "position": "bottom"
+                    }
+                }
+            }
+        },
+        {
+            "id": 7,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 0},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 1200,
+                    "y": 0,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: HA COMPRATORE?\n═══════════════════════════════════════════\n\n→ ROUTE 1: Sì, accredita buyer cashback\n   Filtro: buyerId != null\n\n→ ROUTE 2: No (vendita esterna)\n   Skip",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 8,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/credit",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"userId\": \"{{1.buyerId}}\", \"amount\": {{4.buyerCashback}}, \"type\": \"purchase_cashback\", \"status\": \"pending\", \"referenceId\": \"{{1.paymentId}}\", \"releaseDate\": \"{{4.releaseDate}}\", \"description\": \"Cashback acquisto {{2.data.listing.title}}\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 0,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nACCREDITA CASHBACK COMPRATORE\n═══════════════════════════════════════════\n\nAnche il compratore riceve cashback per incentivare l'uso della piattaforma.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Has Buyer",
+                                "conditions": [[{"a": "{{1.buyerId}}", "b": "", "o": "text:notequal"}]]
+                            }
+                        },
+                        {
+                            "id": 9,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{1.buyerId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"🎁 Cashback per te!\\n\\nHai guadagnato {{4.buyerCashback}}€ per l'acquisto di:\\n📦 {{2.data.listing.title}}\\n\\n⏳ Disponibile dal: {{formatDate(4.releaseDate; \\\"DD/MM/YYYY\\\")}}\"}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {"designer": {"x": 1800, "y": 0, "notes": {"text": "Notifica compratore", "position": "bottom"}}}
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": 10,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 0},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 1200,
+                    "y": 200,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: SELLER HA GROUP LEADER?\n═══════════════════════════════════════════\n\nSe il venditore fa parte di un gruppo, il leader riceve cashback.\n\n→ ROUTE 1: Sì, accredita leader\n   Filtro: sellerGroupId != null",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 11,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/groups/{{2.data.sellerGroupId}}",
+                                "method": "GET",
+                                "headers": [],
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 200,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nRECUPERA DATI GRUPPO\n═══════════════════════════════════════════\n\nOttiene l'ID del group leader.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Seller Has Group",
+                                "conditions": [[{"a": "{{2.data.sellerGroupId}}", "b": "", "o": "text:notequal"}]]
+                            }
+                        },
+                        {
+                            "id": 12,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/credit",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"userId\": \"{{11.data.leaderId}}\", \"amount\": {{4.leaderCashback}}, \"type\": \"leader_commission\", \"status\": \"pending\", \"referenceId\": \"{{1.paymentId}}\", \"releaseDate\": \"{{4.releaseDate}}\", \"description\": \"Commissione leader - Vendita membro {{2.data.seller.name}}\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1800,
+                                    "y": 200,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nACCREDITA GROUP LEADER\n═══════════════════════════════════════════\n\nIl leader riceve una commissione sulle vendite dei membri del suo gruppo.\n\n💡 INCENTIVO GRUPPI:\nMotiva i leader a reclutare e supportare venditori attivi.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "id": 13,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{11.data.leaderId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"👑 Commissione Leader!\\n\\nHai guadagnato {{4.leaderCashback}}€ dalla vendita di un membro del tuo gruppo.\\n\\n👤 Membro: {{2.data.seller.name}}\\n📦 Articolo: {{2.data.listing.title}}\\n💵 Vendita: {{1.amount}}€\"}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {"designer": {"x": 2100, "y": 200, "notes": {"text": "Notifica leader", "position": "bottom"}}}
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": 14,
+            "module": "builtin:BasicRouter",
+            "version": 1,
+            "parameters": {"else": 0},
+            "mapper": null,
+            "metadata": {
+                "designer": {
+                    "x": 1200,
+                    "y": 400,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nROUTER: SELLER HA REFERRER?\n═══════════════════════════════════════════\n\nSe il venditore è stato invitato da qualcuno, il referrer riceve commissione.\n\n💡 PROGRAMMA REFERRAL:\nChi invita nuovi utenti guadagna sulle loro vendite.",
+                        "position": "bottom"
+                    }
+                }
+            },
+            "routes": [
+                {
+                    "flow": [
+                        {
+                            "id": 15,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/cashback/credit",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"userId\": \"{{2.data.sellerReferrerId}}\", \"amount\": {{4.referrerCashback}}, \"type\": \"referral_commission\", \"status\": \"pending\", \"referenceId\": \"{{1.paymentId}}\", \"releaseDate\": \"{{4.releaseDate}}\", \"description\": \"Commissione referral - Vendita {{2.data.seller.name}}\"}",
+                                "parseResponse": true
+                            },
+                            "metadata": {
+                                "designer": {
+                                    "x": 1500,
+                                    "y": 400,
+                                    "notes": {
+                                        "text": "═══════════════════════════════════════════\nACCREDITA REFERRER\n═══════════════════════════════════════════\n\nChi ha invitato il venditore guadagna una commissione.",
+                                        "position": "bottom"
+                                    }
+                                }
+                            },
+                            "filter": {
+                                "name": "Seller Has Referrer",
+                                "conditions": [[{"a": "{{2.data.sellerReferrerId}}", "b": "", "o": "text:notequal"}]]
+                            }
+                        },
+                        {
+                            "id": 16,
+                            "module": "http:ActionSendData",
+                            "version": 3,
+                            "parameters": {},
+                            "mapper": {
+                                "url": "https://graph.facebook.com/v18.0/me/messages?access_token=YOUR_PAGE_ACCESS_TOKEN",
+                                "method": "POST",
+                                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                                "bodyType": "raw",
+                                "contentType": "application/json",
+                                "body": "{\"recipient\":{\"id\":\"{{2.data.sellerReferrerId}}\"},\"messaging_type\":\"MESSAGE_TAG\",\"tag\":\"CONFIRMED_EVENT_UPDATE\",\"message\":{\"text\":\"🎯 Commissione Referral!\\n\\nHai guadagnato {{4.referrerCashback}}€ perché un utente che hai invitato ha venduto qualcosa!\\n\\n👤 Utente: {{2.data.seller.name}}\\n📦 Articolo: {{2.data.listing.title}}\"}}",
+                                "parseResponse": true
+                            },
+                            "metadata": {"designer": {"x": 1800, "y": 400, "notes": {"text": "Notifica referrer", "position": "bottom"}}}
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": 17,
+            "module": "http:ActionSendData",
+            "version": 3,
+            "parameters": {},
+            "mapper": {
+                "url": "https://3nw6p7c866.execute-api.eu-west-1.amazonaws.com/dev/payments/{{1.paymentId}}/complete",
+                "method": "POST",
+                "headers": [{"name": "Content-Type", "value": "application/json"}],
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "body": "{\"cashbackDistributed\": true, \"distributedAt\": \"{{now}}\", \"totalDistributed\": {{4.sellerCashback + 4.buyerCashback + 4.leaderCashback + 4.referrerCashback}}}",
+                "parseResponse": true
+            },
+            "metadata": {
+                "designer": {
+                    "x": 1800,
+                    "y": -200,
+                    "notes": {
+                        "text": "═══════════════════════════════════════════\nMARCA PAGAMENTO COMPLETATO\n═══════════════════════════════════════════\n\nAggiorna il record pagamento con info distribuzione.\n\n🔗 ENDPOINT: POST /payments/{id}/complete\n\n📤 BODY:\n• cashbackDistributed: true\n• distributedAt: timestamp\n• totalDistributed: somma tutti i cashback\n\n💡 Questo previene distribuzioni duplicate se il webhook viene chiamato più volte.",
+                        "position": "bottom"
+                    }
+                }
+            }
+        }
+    ],
+    "metadata": {
+        "version": 1,
+        "scenario": {
+            "roundtrips": 1,
+            "maxErrors": 3,
+            "autoCommit": true,
+            "autoCommitTriggerLast": true,
+            "sequential": false
+        },
+        "designer": {"orphans": []},
+        "notes": "═══════════════════════════════════════════════════════════════\nSCENARIO 4: CASHBACK DISTRIBUTION\n═══════════════════════════════════════════════════════════════\n\n📋 DESCRIZIONE:\nDistribuisce il cashback a tutti i beneficiari quando una vendita viene confermata.\n\n💰 BENEFICIARI:\n1. VENDITORE → 2% (incentivo a vendere)\n2. COMPRATORE → 1% (incentivo a comprare)\n3. GROUP LEADER → 0.5% (se venditore in gruppo)\n4. REFERRER → 0.5% (se venditore invitato)\n\n🔄 FLUSSO:\n\n1. WEBHOOK riceve payment.confirmed\n   ↓\n2. GET payment details (include gruppi, referrer)\n   ↓\n3. GET cashback config (percentuali)\n   ↓\n4. Calcola importi per ogni beneficiario\n   ↓\n5. POST /cashback/credit per SELLER → Notifica\n   ↓\n6. Se BUYER: POST /cashback/credit → Notifica\n   ↓\n7. Se LEADER: GET gruppo → POST /cashback/credit → Notifica\n   ↓\n8. Se REFERRER: POST /cashback/credit → Notifica\n   ↓\n9. POST /payments/{id}/complete\n\n⚙️ CONFIGURAZIONI:\n• YOUR_PAGE_ACCESS_TOKEN\n• Webhook URL in Lambda Payments\n\n📊 ESEMPIO (vendita 350€):\n• Commissione piattaforma: 17.50€\n• Venditore: 7.00€\n• Compratore: 3.50€\n• Leader: 1.75€\n• Referrer: 1.75€\n• Piattaforma netto: 3.50€\n\n⏳ STATO PENDING:\nTutti i cashback sono 'pending' per 30 giorni.\nLo Scenario 5 li rilascia automaticamente.\n\n📊 OPERAZIONI: ~6-12 per vendita"
+    }
+}
